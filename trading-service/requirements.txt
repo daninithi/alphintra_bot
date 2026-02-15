@@ -1,0 +1,22 @@
+# Core dependencies
+ccxt==4.2.25
+pandas>=2.2.0
+numpy>=2.0.0
+python-dotenv==1.0.0
+fastapi>=0.104.1
+uvicorn>=0.24.0
+psycopg2-binary>=2.9.9
+PyJWT>=2.8.0
+
+# Technical Analysis (pandas-ta has all indicators we need)
+pandas-ta>=0.4.67b0
+
+# Logging and utilities
+colorlog==6.8.0
+python-dateutil==2.8.2
+
+# Development
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+black>=23.12.1
+flake8>=7.0.0

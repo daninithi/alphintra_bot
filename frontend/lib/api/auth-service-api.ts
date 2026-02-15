@@ -1,0 +1,184 @@
+// file path: "D:\Alphintra\Alphintra\src\frontend\lib\api\auth-service-api.ts"
+
+import axios from 'axios';
+import { gatewayHttpBaseUrl } from '../config/gateway';
+import { getToken } from '../auth';
+
+
+// Types for Auth API
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+  date_of_birth?: string;
+  phone_number?: string;
+  address?: string;
+  kyc_status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterCredentials {
+  username: string;
+  email: string;
+  password: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface GoogleLoginCredentials {
+  google_token: string;
+}
+
+export interface AuthResponse {
+  user: User;
+  token: string;
+}
+
+export interface UpdateProfileRequest {
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  address?: string;
+}
+
+export interface DeleteAccountRequest {
+  password: string;
+  confirmationText?: string;
+}
+
+export interface DeleteAccountResponse {
+  message: string;
+  username: string;
+}
+
+export class AuthServiceApiClient {
+  private api: ReturnType<typeof axios.create>;
+
+  constructor() {
+    this.api = axios.create({
+      baseURL: gatewayHttpBaseUrl,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    this.api.interceptors.request.use((config) => {
+      const token = getToken();
+      if (token) {
+        config.headers = config.headers ?? {};
+        if (!config.headers['Authorization']) {
+          config.headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+      return config;
+    });
+
+    if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_API === 'true') {
+      console.log('🔧 AuthServiceApiClient Debug:', {
+        baseUrl: this.api.defaults.baseURL,
+      });
+    }
+  }
+
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+    try {
+      console.log('[AuthAPI] Attempting login to:', this.api.defaults.baseURL + '/auth/f/login');
+      console.log('[AuthAPI] Credentials:', { email: credentials.email, passwordLength: credentials.password?.length });
+      const response = await this.api.post<AuthResponse>('/auth/f/login', credentials);
+      console.log('[AuthAPI] Login response received:', { hasToken: !!response.data?.token, hasUser: !!response.data?.user });
+      return response.data;
+    } catch (error: any) {
+      console.error('[AuthAPI] Login error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url,
+        baseURL: this.api.defaults.baseURL
+      });
+      throw error;
+    }
+  }
+
+  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
+    // Make sure keys match backend DTO fields
+    const payload = {
+      username: credentials.username,
+      email: credentials.email,
+      password: credentials.password,
+      firstName: credentials.firstName,
+      lastName: credentials.lastName,
+    };
+
+    const response = await this.api.post<AuthResponse>('/auth/f/register', payload);
+    return response.data;
+  }
+
+  async googleLogin(credentials: GoogleLoginCredentials): Promise<AuthResponse> {
+    const response = await this.api.post<AuthResponse>('/auth/f/google', credentials);
+    return response.data;
+  }
+
+  async getProfile(): Promise<User> {
+    const response = await this.api.get<User>('/auth/users/me');
+    return response.data;
+  }
+
+  async updateProfile(data: UpdateProfileRequest): Promise<User> {
+    // Get user email from localStorage to identify the user
+    // Try both possible storage keys
+    const userStr = localStorage.getItem('alphintra_jwt_user') || localStorage.getItem('alphintra_user');
+    if (!userStr) {
+      throw new Error('User email not found. Please log in again.');
+    }
+    
+    const user = JSON.parse(userStr);
+    const email = user.email;
+    
+    if (!email) {
+      throw new Error('User email not found. Please log in again.');
+    }
+
+    // Include email in the request body
+    const payload = {
+      email: email,
+      ...data
+    };
+
+    const response = await this.api.put<User>('/auth/users/me', payload);
+    return response.data;
+  }
+
+  async deleteAccount(): Promise<DeleteAccountResponse> {
+    // Get user email from localStorage to identify the user
+    // Try both possible storage keys
+    const userStr = localStorage.getItem('alphintra_jwt_user') || localStorage.getItem('alphintra_user');
+    if (!userStr) {
+      throw new Error('User email not found. Please log in again.');
+    }
+    
+    const user = JSON.parse(userStr);
+    const email = user.email;
+    
+    if (!email) {
+      throw new Error('User email not found. Please log in again.');
+    }
+
+    // Send email in request body using axios.request (DELETE with body)
+    const response = await this.api.request<DeleteAccountResponse>({
+      method: 'DELETE',
+      url: '/auth/users/account',
+      data: { email } as any
+    });
+    return response.data;
+  }
+}
+
+export const authServiceApiClient = new AuthServiceApiClient();

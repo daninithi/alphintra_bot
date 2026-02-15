@@ -1,0 +1,99 @@
+export interface Coin {
+    id: string;
+    name: string;
+    symbol: string;
+    image: string;
+    current_price: number;
+    market_cap: number;
+    total_volume: number;
+    price_change_percentage_24h: number;
+  }
+
+  export interface NewsItem  {
+  id: string;
+  title: string;
+  url: string;
+  imageurl: string | null;
+  published_on: number;
+  source: string;
+  body: string | null;
+}
+export type Portfolio = {
+  totalValue: number;
+  availableBalance: number;
+  pnlDay: number;
+  pnlWeek: number;
+  pnlMonth: number;
+};
+
+export type Bot = {
+  name: string;
+  asset: string;
+  pnl: number;
+  status: 'Running' | 'Stopped' | 'Error';
+  stats: string;
+};
+
+// API Response types for Trading Engine
+export interface TradingBot {
+  id: number;
+  user_id: number;
+  strategy_name: string;
+  coin: string;
+  capital: number;
+  status: string;
+  last_run: string | null;
+  created_at: string;
+  stopped_at: string | null;
+  error_message: string | null;
+}
+
+export interface TradingPosition {
+  id: number;
+  userId: number;
+  botId: number;
+  asset: string;
+  symbol: string;
+  entryPrice: number;
+  quantity: number;
+  openedAt: string;
+  closedAt: string | null;
+  status: 'OPEN' | 'CLOSED';
+}
+
+
+
+export interface Order {
+  orderId: number;
+  orderUuid: string;
+  userId: number;
+  accountId: number;
+  symbol: string; // Matches backend 'symbol' instead of 'asset'
+  side: string;
+  orderType: string;
+  quantity: string; // BigDecimal as string
+  price: string;   // BigDecimal as string
+  stopPrice: string | null;
+  timeInForce: string;
+  status: string;
+  filledQuantity: string; // BigDecimal as string
+  averagePrice: string | null;
+  fee: string; // BigDecimal as string
+  exchange: string;
+  clientOrderId: string | null;
+  exchangeOrderId: string | null;
+  createdAt: string; // ISO date
+  updatedAt: string; // ISO date
+  expiresAt: string | null;
+}
+
+
+
+export interface User {
+  name: string;
+  email: string;
+  phone: string;
+  location: string;
+  tier: 'premium' | 'standard' | 'basic';
+  status: 'active' | 'pending' | 'inactive';
+}

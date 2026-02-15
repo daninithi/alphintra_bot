@@ -1,0 +1,104 @@
+steps:
+  # Build the Next.js application and create Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '--target'
+      - 'production'
+      - '-t'
+      - 'gcr.io/$_PROJECT_ID/alphintra-frontend:${_BUILD_TAG}'
+      - '-t'
+      - 'gcr.io/$_PROJECT_ID/alphintra-frontend:latest'
+      - '.'
+    dir: 'src/frontend'
+
+  # Push the Docker image to Google Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$_PROJECT_ID/alphintra-frontend:${_BUILD_TAG}'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$_PROJECT_ID/alphintra-frontend:latest'
+
+  # Delete existing deployment to handle selector immutability
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'delete'
+      - 'deployment'
+      - 'frontend-app'
+      - '-n'
+      - 'default'
+      - '--ignore-not-found=true'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=alphintra-cluster'
+
+  # Apply Kubernetes manifests for frontend
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'apply'
+      - '-k'
+      - 'infra/kubernetes/overlays/frontend'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=alphintra-cluster'
+
+  # Update the deployment with the new image
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'set'
+      - 'image'
+      - 'deployment/frontend-app'
+      - 'alphintra-frontend=gcr.io/$_PROJECT_ID/alphintra-frontend:${_BUILD_TAG}'
+      - '-n'
+      - 'default'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=alphintra-cluster'
+
+  # Wait for the deployment to complete
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'rollout'
+      - 'status'
+      - 'deployment/frontend-app'
+      - '-n'
+      - 'default'
+      - '--timeout=300s'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=alphintra-cluster'
+
+  # Verify the deployment
+  - name: 'gcr.io/cloud-builders/kubectl'
+    args:
+      - 'get'
+      - 'pods'
+      - '-l'
+      - 'app=frontend-app'
+      - '-n'
+      - 'default'
+    env:
+      - 'CLOUDSDK_COMPUTE_ZONE=us-central1-a'
+      - 'CLOUDSDK_CONTAINER_CLUSTER=alphintra-cluster'
+
+# Store images in Google Container Registry
+images:
+  - 'gcr.io/$_PROJECT_ID/alphintra-frontend:${_BUILD_TAG}'
+  - 'gcr.io/$_PROJECT_ID/alphintra-frontend:latest'
+
+# Build options
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+# Timeout for the entire build
+timeout: '1200s'
+
+# Substitutions with default values
+substitutions:
+  _BUILD_TAG: 'v1.0.0'
+  _PROJECT_ID: 'alphintra-472817'
