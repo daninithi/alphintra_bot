@@ -23,8 +23,7 @@ import {
 } from 'lucide-react';
 import { 
   customerSupportApi, 
-  CreateCommunicationRequest,
-  CommunicationType
+  CreateCommunicationRequest
 } from '@/lib/api/customer-support-api';
 import { toast } from 'react-hot-toast';
 
@@ -265,7 +264,6 @@ export default function VideoCallInterface({
 
       const request: CreateCommunicationRequest = {
         content,
-        communicationType: CommunicationType.VIDEO_CALL,
         isInternal: false
       };
 

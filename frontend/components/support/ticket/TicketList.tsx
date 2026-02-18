@@ -70,7 +70,13 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
         ...(searchTerm && { searchTerm })
       };
 
-      const response = await customerSupportApi.getTickets(filterParams, currentPage, 20);
+      const response = isAgentView 
+        ? await customerSupportApi.getTickets(filterParams, currentPage, 1000)
+        : await customerSupportApi.getMyTickets(
+            statusFilter !== 'ALL' ? [statusFilter as TicketStatus] : undefined, 
+            currentPage, 
+            1000
+          );
       setTickets(response.content);
       setTotalPages(response.totalPages);
       setTotalElements(response.totalElements);
@@ -147,34 +153,6 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {isAgentView ? 'Assigned Tickets' : 'Support Tickets'}
-          </h1>
-          <p className="text-gray-600">
-            {totalElements > 0 
-              ? `${totalElements} ticket${totalElements !== 1 ? 's' : ''} found`
-              : 'No tickets to display'
-            }
-          </p>
-        </div>
-        
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleRefresh} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
-          </Button>
-          {!isAgentView && (
-            <Button onClick={() => setShowCreateModal(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              New Ticket
-            </Button>
-          )}
-        </div>
-      </div>
-
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
@@ -268,11 +246,11 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
             </Card>
           ))}
         </div>
-      ) : tickets.length === 0 ? (
+      ) : (tickets || []).length === 0 ? (
         <EmptyState />
       ) : (
         <div className="space-y-4">
-          {tickets.map((ticket) => (
+          {(tickets || []).map((ticket) => (
             <Card 
               key={ticket.ticketId} 
               className="cursor-pointer hover:shadow-md transition-shadow"

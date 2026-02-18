@@ -7,6 +7,7 @@ import { marketDataApi } from './market-data-api';
 import { riskManagementApi } from './risk-management-api';
 import { noCodeApiClient } from './no-code-api';
 import { subscriptionApiClient } from './subscription-api';
+import { ticketingApi } from './ticketing-api';
 import { gatewayHttpBaseUrl } from '../config/gateway';
 import { getToken } from '../auth';
 
@@ -183,6 +184,16 @@ export {
   SUBSCRIPTION_PLANS
 } from './subscription-api';
 
+// Export ticketing API
+export { 
+  ticketingApi,
+  type CreateTicketRequest,
+  type UpdateTicketRequest,
+  type TicketResponse,
+  TicketStatus,
+  TicketPriority
+} from './ticketing-api';
+
 // Consolidated API object for easy access
 export const api = {
   auth: authApi,
@@ -191,4 +202,5 @@ export const api = {
   riskManagement: riskManagementApi,
   noCode: noCodeApiClient,
   subscription: subscriptionApiClient,
+  ticketing: ticketingApi,
 } as const;

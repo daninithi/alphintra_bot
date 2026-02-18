@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Icon } from "@iconify/react";
 import { usePathname, useRouter } from "next/navigation";
 import { useSubscriptionModal } from "@/contexts/SubscriptionModalContext";
+import { useAuth } from "@/components/auth/auth-provider";
 
 interface Props {
   item: SidebarItemType;
@@ -15,6 +16,7 @@ const SidebarItem = ({ item, collapsed = false }: Props) => {
   const router = useRouter();
   const isActive = pathname === item.url;
   const { openModal } = useSubscriptionModal();
+  const { logout } = useAuth();
 
   const handleClick = (e: React.MouseEvent) => {
     if (item.isModal) {
@@ -27,21 +29,28 @@ const SidebarItem = ({ item, collapsed = false }: Props) => {
   };
 
   const handleLogout = () => {
-    // Clear all authentication data
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('alphintra_jwt_token');
-      localStorage.removeItem('alphintra_auth_token');
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('alphintra_jwt_user');
-      localStorage.removeItem('alphintra_wallet_credentials');
+    try {
+      // Call the auth provider's logout to clear auth state
+      logout();
       
-      // Clear any other session data
-      sessionStorage.clear();
-      
-      console.log('✅ User logged out successfully');
-      
-      // Redirect to login/home page
-      router.push('/');
+      // Clear additional session data
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('alphintra_wallet_credentials');
+        sessionStorage.clear();
+        
+        console.log('✅ User logged out successfully');
+        
+        // Redirect to home/login page
+        router.push('/');
+      }
+    } catch (error) {
+      console.error('Logout failed:', error);
+      // Fallback: clear manually
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        sessionStorage.clear();
+        router.push('/');
+      }
     }
   };
 

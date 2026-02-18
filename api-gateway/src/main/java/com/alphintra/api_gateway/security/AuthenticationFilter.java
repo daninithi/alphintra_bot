@@ -22,13 +22,14 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, org.springframework.cloud.gateway.filter.GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
         
-        // Skip JWT check for public endpoints
+        // Skip JWT check for public endpoints and ticketing service (for development)
         if (path.contains("/f/") || 
             path.contains("/swagger-ui.html") || 
             path.contains("/v3/api-docs") || 
             path.contains("/webjars") ||
             path.contains("/health") ||
-            path.contains("/actuator")) {
+            path.contains("/actuator") ||
+            path.contains("/ticketing/")) {
             System.out.println("Skipping JWT check for path: " + path);
             return chain.filter(exchange);
         }
@@ -49,8 +50,17 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
-        System.out.println("Valid token for path: " + path);
-        return chain.filter(exchange);
+
+        // Extract userId and add to request headers
+        String userId = jwtUtil.extractUserId(token);
+        ServerWebExchange modifiedExchange = exchange.mutate()
+                .request(exchange.getRequest().mutate()
+                        .header("X-User-Id", userId)
+                        .build())
+                .build();
+
+        System.out.println("Valid token for path: " + path + ", userId: " + userId);
+        return chain.filter(modifiedExchange);
     }
 
     @Override

@@ -14,22 +14,20 @@ export interface CreateTicketRequest {
   category: TicketCategory;
   priority?: TicketPriority;
   tags?: string[];
-  userEmail?: string;
-  userPhone?: string;
-  preferredContactMethod?: string;
-  browserInfo?: string;
-  operatingSystem?: string;
-  platformVersion?: string;
   errorLogs?: string;
   attachments?: string[];
 }
 
 export interface UpdateTicketRequest {
-  status?: TicketStatus;
+  title?: string;
+  description?: string;
   priority?: TicketPriority;
-  assignedAgentId?: string;
+  status?: TicketStatus;
+  category?: TicketCategory;
+  assigneeId?: number;
   tags?: string[];
-  notes?: string;
+  errorLogs?: string;
+  attachments?: string[];
 }
 
 export interface EscalationRequest {
@@ -41,7 +39,6 @@ export interface EscalationRequest {
 
 export interface CreateCommunicationRequest {
   content: string;
-  communicationType: CommunicationType;
   isInternal?: boolean;
   attachments?: string[];
 }
@@ -61,20 +58,15 @@ export interface TicketFilter {
 // Enums
 export enum TicketCategory {
   TECHNICAL = 'TECHNICAL',
+  BUG_REPORT = 'BUG_REPORT',
   STRATEGY_DEVELOPMENT = 'STRATEGY_DEVELOPMENT',
   LIVE_TRADING = 'LIVE_TRADING',
-  PAPER_TRADING = 'PAPER_TRADING',
   BROKER_INTEGRATION = 'BROKER_INTEGRATION',
-  MODEL_TRAINING = 'MODEL_TRAINING',
-  BACKTESTING = 'BACKTESTING',
   ACCOUNT_BILLING = 'ACCOUNT_BILLING',
-  KYC_VERIFICATION = 'KYC_VERIFICATION',
-  API_SDK = 'API_SDK',
   MARKETPLACE = 'MARKETPLACE',
   SECURITY = 'SECURITY',
   DATA_PRIVACY = 'DATA_PRIVACY',
   FEATURE_REQUEST = 'FEATURE_REQUEST',
-  BUG_REPORT = 'BUG_REPORT',
   GENERAL_INQUIRY = 'GENERAL_INQUIRY',
   OTHER = 'OTHER'
 }
@@ -91,27 +83,12 @@ export enum TicketStatus {
   NEW = 'NEW',
   ASSIGNED = 'ASSIGNED',
   IN_PROGRESS = 'IN_PROGRESS',
-  PENDING_USER = 'PENDING_USER',
-  PENDING_INTERNAL = 'PENDING_INTERNAL',
   ESCALATED = 'ESCALATED',
   RESOLVED = 'RESOLVED',
   CLOSED = 'CLOSED',
   REOPENED = 'REOPENED'
 }
 
-export enum CommunicationType {
-  MESSAGE = 'MESSAGE',
-  EMAIL = 'EMAIL',
-  PHONE_LOG = 'PHONE_LOG',
-  VIDEO_CALL = 'VIDEO_CALL',
-  SCREEN_SHARE = 'SCREEN_SHARE',
-  INTERNAL_NOTE = 'INTERNAL_NOTE',
-  SYSTEM_LOG = 'SYSTEM_LOG',
-  FILE_UPLOAD = 'FILE_UPLOAD',
-  STATUS_UPDATE = 'STATUS_UPDATE',
-  ESCALATION = 'ESCALATION',
-  RESOLUTION = 'RESOLUTION'
-}
 
 export enum AgentLevel {
   L1 = 'L1',
@@ -128,33 +105,19 @@ export enum SenderType {
 
 // Response Types
 export interface Ticket {
-  ticketId: string;
-  userId: string;
+  id: number;
   title: string;
   description: string;
-  category: TicketCategory;
-  priority: TicketPriority;
   status: TicketStatus;
-  assignedAgentId?: string;
-  assignedAgentName?: string;
-  escalationLevel: number;
-  tags: string[];
+  priority?: TicketPriority;
+  category: TicketCategory;
+  customerId: string;
+  errorLogs?: string;
+  tags?: string[];
+  attachments?: string[];
+  assigneeId?: number;
   createdAt: string;
   updatedAt: string;
-  resolvedAt?: string;
-  estimatedResolutionTime?: string;
-  lastUpdatedBy?: string;
-  satisfactionRating?: number;
-  satisfactionFeedback?: string;
-  communicationCount?: number;
-  lastCommunicationAt?: string;
-  hasUnreadMessages?: boolean;
-  priorityDisplayName?: string;
-  statusDisplayName?: string;
-  categoryDisplayName?: string;
-  userEmail?: string;
-  userFullName?: string;
-  userAccountType?: string;
 }
 
 export interface Communication {
@@ -164,7 +127,6 @@ export interface Communication {
   senderName?: string;
   senderType: SenderType;
   content: string;
-  communicationType: CommunicationType;
   isInternal: boolean;
   attachments?: string[];
   createdAt: string;
@@ -411,20 +373,15 @@ export const formatStatus = (status: TicketStatus): string => {
 export const formatCategory = (category: TicketCategory): string => {
   const categoryMap = {
     [TicketCategory.TECHNICAL]: 'Technical',
+    [TicketCategory.BUG_REPORT]: 'Bug Report',
     [TicketCategory.STRATEGY_DEVELOPMENT]: 'Strategy Development',
     [TicketCategory.LIVE_TRADING]: 'Live Trading',
-    [TicketCategory.PAPER_TRADING]: 'Paper Trading',
     [TicketCategory.BROKER_INTEGRATION]: 'Broker Integration',
-    [TicketCategory.MODEL_TRAINING]: 'Model Training',
-    [TicketCategory.BACKTESTING]: 'Backtesting',
     [TicketCategory.ACCOUNT_BILLING]: 'Account & Billing',
-    [TicketCategory.KYC_VERIFICATION]: 'KYC Verification',
-    [TicketCategory.API_SDK]: 'API & SDK',
     [TicketCategory.MARKETPLACE]: 'Marketplace',
     [TicketCategory.SECURITY]: 'Security',
     [TicketCategory.DATA_PRIVACY]: 'Data Privacy',
     [TicketCategory.FEATURE_REQUEST]: 'Feature Request',
-    [TicketCategory.BUG_REPORT]: 'Bug Report',
     [TicketCategory.GENERAL_INQUIRY]: 'General Inquiry',
     [TicketCategory.OTHER]: 'Other'
   };

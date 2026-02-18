@@ -19,26 +19,13 @@ import {
 } from '@/lib/api/customer-support-api';
 import { toast } from 'react-hot-toast';
 
-interface CreateTicketModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onTicketCreated: () => void;
-  userId: string;
-  userEmail?: string;
-}
-
 const CATEGORY_ICONS = {
   [TicketCategory.TECHNICAL]: Bug,
   [TicketCategory.BUG_REPORT]: Bug,
   [TicketCategory.STRATEGY_DEVELOPMENT]: Settings,
   [TicketCategory.LIVE_TRADING]: AlertTriangle,
-  [TicketCategory.PAPER_TRADING]: Settings,
   [TicketCategory.BROKER_INTEGRATION]: Settings,
-  [TicketCategory.MODEL_TRAINING]: Settings,
-  [TicketCategory.BACKTESTING]: Settings,
   [TicketCategory.ACCOUNT_BILLING]: CreditCard,
-  [TicketCategory.KYC_VERIFICATION]: Settings,
-  [TicketCategory.API_SDK]: Settings,
   [TicketCategory.MARKETPLACE]: Settings,
   [TicketCategory.SECURITY]: AlertTriangle,
   [TicketCategory.DATA_PRIVACY]: Settings,
@@ -46,6 +33,14 @@ const CATEGORY_ICONS = {
   [TicketCategory.GENERAL_INQUIRY]: HelpCircle,
   [TicketCategory.OTHER]: HelpCircle,
 };
+
+interface CreateTicketModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onTicketCreated: () => void;
+  userId: string;
+  userEmail?: string;
+}
 
 export default function CreateTicketModal({ 
   isOpen, 
@@ -59,11 +54,6 @@ export default function CreateTicketModal({
     description: '',
     category: '' as TicketCategory | '',
     priority: '' as TicketPriority | '',
-    userPhone: '',
-    preferredContactMethod: 'EMAIL',
-    browserInfo: '',
-    operatingSystem: '',
-    platformVersion: '',
     errorLogs: ''
   });
   const [tags, setTags] = useState<string[]>([]);
@@ -89,12 +79,6 @@ export default function CreateTicketModal({
         category: formData.category,
         priority: formData.priority || undefined,
         tags: tags.length > 0 ? tags : undefined,
-        userEmail: userEmail || undefined,
-        userPhone: formData.userPhone || undefined,
-        preferredContactMethod: formData.preferredContactMethod || undefined,
-        browserInfo: formData.browserInfo || undefined,
-        operatingSystem: formData.operatingSystem || undefined,
-        platformVersion: formData.platformVersion || undefined,
         errorLogs: formData.errorLogs || undefined,
         attachments: attachments.length > 0 ? attachments : undefined
       };
@@ -119,11 +103,6 @@ export default function CreateTicketModal({
       description: '',
       category: '' as TicketCategory | '',
       priority: '' as TicketPriority | '',
-      userPhone: '',
-      preferredContactMethod: 'EMAIL',
-      browserInfo: '',
-      operatingSystem: '',
-      platformVersion: '',
       errorLogs: ''
     });
     setTags([]);
@@ -192,7 +171,7 @@ export default function CreateTicketModal({
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 placeholder="Please provide detailed information about your issue"
                 rows={4}
-                className="mt-1"
+                className="mt-1 placeholder-black dark:placeholder-white text-black dark:text-white" 
                 required
               />
             </div>
@@ -232,7 +211,7 @@ export default function CreateTicketModal({
                   onValueChange={(value) => setFormData(prev => ({ ...prev, priority: value as TicketPriority }))}
                 >
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Auto-determined" />
+                    <SelectValue placeholder="select priority" />
                   </SelectTrigger>
                   <SelectContent>
                     {Object.values(TicketPriority).map(priority => (
@@ -277,101 +256,19 @@ export default function CreateTicketModal({
             </div>
           </div>
 
-          {/* Contact Information */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-900">Contact Information</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="userPhone" className="text-sm font-medium">
-                  Phone Number
-                </Label>
-                <Input
-                  id="userPhone"
-                  value={formData.userPhone}
-                  onChange={(e) => setFormData(prev => ({ ...prev, userPhone: e.target.value }))}
-                  placeholder="Optional phone number"
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="preferredContact" className="text-sm font-medium">
-                  Preferred Contact Method
-                </Label>
-                <Select
-                  value={formData.preferredContactMethod}
-                  onValueChange={(value) => setFormData(prev => ({ ...prev, preferredContactMethod: value }))}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="EMAIL">Email</SelectItem>
-                    <SelectItem value="PHONE">Phone</SelectItem>
-                    <SelectItem value="CHAT">Live Chat</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* Technical Information */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-medium text-gray-900">Technical Information (optional)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="browserInfo" className="text-sm font-medium">
-                  Browser Information
-                </Label>
-                <Input
-                  id="browserInfo"
-                  value={formData.browserInfo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, browserInfo: e.target.value }))}
-                  placeholder="e.g., Chrome 120.0.6099.224"
-                  className="mt-1"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="operatingSystem" className="text-sm font-medium">
-                  Operating System
-                </Label>
-                <Input
-                  id="operatingSystem"
-                  value={formData.operatingSystem}
-                  onChange={(e) => setFormData(prev => ({ ...prev, operatingSystem: e.target.value }))}
-                  placeholder="e.g., Windows 11, macOS 14.1"
-                  className="mt-1"
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="platformVersion" className="text-sm font-medium">
-                Platform Version
-              </Label>
-              <Input
-                id="platformVersion"
-                value={formData.platformVersion}
-                onChange={(e) => setFormData(prev => ({ ...prev, platformVersion: e.target.value }))}
-                placeholder="e.g., v2.1.0"
-                className="mt-1"
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="errorLogs" className="text-sm font-medium">
-                Error Logs or Messages
-              </Label>
-              <Textarea
-                id="errorLogs"
-                value={formData.errorLogs}
-                onChange={(e) => setFormData(prev => ({ ...prev, errorLogs: e.target.value }))}
-                placeholder="Copy and paste any error messages or logs"
-                rows={3}
-                className="mt-1"
-              />
-            </div>
+{/* Error Logs */}
+          <div>
+            <Label htmlFor="errorLogs" className="text-sm font-medium">
+              Error Logs or Messages (optional)
+            </Label>
+            <Textarea
+              id="errorLogs"
+              value={formData.errorLogs}
+              onChange={(e) => setFormData(prev => ({ ...prev, errorLogs: e.target.value }))}
+              placeholder="Copy and paste any error messages or logs"
+              rows={3}
+              className="mt-1"
+            />
           </div>
 
           {/* File Attachments */}

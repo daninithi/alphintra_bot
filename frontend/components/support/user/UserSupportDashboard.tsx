@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Plus, MessageSquare, Clock, CheckCircle, AlertTriangle, HelpCircle, Zap } from 'lucide-react';
+import { Plus, MessageSquare, Clock, CheckCircle, AlertTriangle, HelpCircle, Zap, ArrowLeft, RefreshCw } from 'lucide-react';
 import { 
   customerSupportApi, 
   Ticket, 
@@ -21,11 +21,9 @@ import { toast } from 'react-hot-toast';
 
 interface UserSupportDashboardProps {
   userId: string;
-  userEmail?: string;
-  userName?: string;
 }
 
-export default function UserSupportDashboard({ userId, userEmail, userName }: UserSupportDashboardProps) {
+export default function UserSupportDashboard({ userId }: UserSupportDashboardProps) {
   const [recentTickets, setRecentTickets] = useState<Ticket[]>([]);
   const [stats, setStats] = useState<TicketStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,9 +37,9 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      // Load recent tickets (last 5)
-      const ticketsResponse = await customerSupportApi.getMyTickets(undefined, 0, 5);
-      setRecentTickets(ticketsResponse.content);
+      // Load recent tickets (last 3)
+      const ticketsResponse = await customerSupportApi.getMyTickets(undefined, 0, 3);
+      setRecentTickets(ticketsResponse?.content || []);
 
       // Load user stats
       const statsResponse = await customerSupportApi.getTicketStats();
@@ -52,6 +50,10 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleViewChange = (newView: 'dashboard' | 'all-tickets') => {
+    setView(newView);
   };
 
   const handleTicketCreated = () => {
@@ -74,61 +76,54 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
     }
   };
 
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
-
-  if (view === 'all-tickets') {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <Button variant="outline" onClick={() => setView('dashboard')}>
-            ← Back to Dashboard
-          </Button>
-        </div>
-        <TicketList userId={userId} userEmail={userEmail} />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            {getGreeting()}{userName ? `, ${userName}` : ''}
-          </h1>
-          <p className="text-gray-600 mt-1">
-            How can we help you today? Access your support tickets and get assistance.
-          </p>
-        </div>
-        
-        <Button onClick={() => setShowCreateModal(true)} size="lg">
-          <Plus className="w-5 h-5 mr-2" />
-          Create Ticket
-        </Button>
-      </div>
-
-      {/* Quick Stats */}
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <Card key={i}>
-              <CardContent className="pt-6">
-                <div className="animate-pulse space-y-3">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-8 bg-gray-200 rounded w-1/2"></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      {view === 'all-tickets' ? (
+        <>
+          {/* All Tickets View */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                onClick={() => handleViewChange('dashboard')}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <h1 className="text-2xl font-bold text-gray-900">All My Tickets</h1>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => window.location.reload()}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          </div>
+          
+          <TicketList userId={userId} />
+        </>
+      ) : (
+        <>
+          {/* Dashboard View */}
+          {/* Quick Stats */}
+          {loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[...Array(3)].map((_, i) => (
+                <Card key={i}>
+                  <CardContent className="pt-6">
+                    <div className="animate-pulse space-y-3">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
       ) : stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
@@ -137,18 +132,6 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
                   <p className="text-2xl font-bold text-gray-900">{stats.totalTickets}</p>
                 </div>
                 <MessageSquare className="w-8 h-8 text-blue-500" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">Open Tickets</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.openTickets}</p>
-                </div>
-                <Clock className="w-8 h-8 text-yellow-500" />
               </div>
             </CardContent>
           </Card>
@@ -203,7 +186,7 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
             <Button 
               variant="outline" 
               className="h-20 flex flex-col gap-2"
-              onClick={() => setView('all-tickets')}
+              onClick={() => handleViewChange('all-tickets')}
             >
               <MessageSquare className="w-6 h-6" />
               <span>View All Tickets</span>
@@ -229,11 +212,7 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
               <MessageSquare className="w-5 h-5" />
               Recent Tickets
             </CardTitle>
-            {recentTickets.length > 0 && (
-              <Button variant="outline" onClick={() => setView('all-tickets')}>
-                View All
-              </Button>
-            )}
+          
           </div>
         </CardHeader>
         <CardContent>
@@ -250,7 +229,7 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
                 </div>
               ))}
             </div>
-          ) : recentTickets.length === 0 ? (
+          ) : !recentTickets || recentTickets.length === 0 ? (
             <div className="text-center py-12">
               <MessageSquare className="w-12 h-12 mx-auto text-gray-400 mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No tickets yet</h3>
@@ -293,16 +272,6 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
                   <p className="text-sm text-gray-600 mb-3 line-clamp-2">
                     {ticket.description}
                   </p>
-                  
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <span>Created {formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true })}</span>
-                    {ticket.hasUnreadMessages && (
-                      <span className="flex items-center gap-1 text-blue-600 font-medium">
-                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                        New messages
-                      </span>
-                    )}
-                  </div>
                 </div>
               ))}
             </div>
@@ -352,6 +321,8 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
           </div>
         </CardContent>
       </Card>
+        </>
+      )}
 
       {/* Create Ticket Modal */}
       <CreateTicketModal
@@ -359,7 +330,6 @@ export default function UserSupportDashboard({ userId, userEmail, userName }: Us
         onClose={() => setShowCreateModal(false)}
         onTicketCreated={handleTicketCreated}
         userId={userId}
-        userEmail={userEmail}
       />
     </div>
   );

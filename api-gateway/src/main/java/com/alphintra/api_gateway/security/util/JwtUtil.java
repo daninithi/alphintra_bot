@@ -39,4 +39,10 @@ public class JwtUtil {
                 .parseClaimsJws(token)
                 .getBody();
     }
+
+    public String extractUserId(String token) {
+        Claims claims = extractClaims(token);
+        Integer userIdInt = claims.get("userId", Integer.class);
+        return userIdInt.toString();
+    }
 }

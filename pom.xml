@@ -20,6 +20,7 @@
 		<module>discovery-server</module>
 		<module>api-gateway</module>
 		<module>auth-service</module>
+		<module>ticketing-service</module>
 	</modules>
 
 	<properties>
@@ -37,6 +38,10 @@
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>jakarta.persistence</groupId>
+			<artifactId>jakarta.persistence-api</artifactId>
 		</dependency>
 	</dependencies>
 	<dependencyManagement>

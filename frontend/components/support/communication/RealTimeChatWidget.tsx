@@ -24,7 +24,6 @@ import {
 import { 
   customerSupportApi, 
   Communication, 
-  CommunicationType,
   SenderType,
   CreateCommunicationRequest
 } from '@/lib/api/customer-support-api';
@@ -91,10 +90,7 @@ export default function RealTimeChatWidget({
     try {
       const communications = await customerSupportApi.getTicketCommunications(ticketId);
       const chatMessages: ChatMessage[] = communications
-        .filter(comm => 
-          comm.communicationType === CommunicationType.MESSAGE && 
-          !comm.isInternal
-        )
+        .filter(comm => !comm.isInternal)
         .map(comm => ({
           ...comm,
           isOwn: comm.senderId === currentUserId,
@@ -162,10 +158,7 @@ export default function RealTimeChatWidget({
       try {
         const communications = await customerSupportApi.getTicketCommunications(ticketId);
         const latestMessages = communications
-          .filter(comm => 
-            comm.communicationType === CommunicationType.MESSAGE && 
-            !comm.isInternal
-          )
+          .filter(comm => !comm.isInternal)
           .map(comm => ({
             ...comm,
             isOwn: comm.senderId === currentUserId,
@@ -224,7 +217,6 @@ export default function RealTimeChatWidget({
       senderName: currentUserName,
       senderType: isAgent ? SenderType.AGENT : SenderType.USER,
       content: messageContent,
-      communicationType: CommunicationType.MESSAGE,
       isInternal: false,
       createdAt: new Date().toISOString(),
       isOwn: true,
@@ -236,7 +228,6 @@ export default function RealTimeChatWidget({
     try {
       const request: CreateCommunicationRequest = {
         content: messageContent,
-        communicationType: CommunicationType.MESSAGE,
         isInternal: false
       };
 

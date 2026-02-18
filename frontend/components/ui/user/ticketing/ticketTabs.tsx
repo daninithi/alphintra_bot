@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/index';
 import { Clock, X } from 'lucide-react';
 import { ticketSchema } from '@/lib/api/schemas';
+import { api, TicketPriority, TicketStatus } from '@/lib/api';
 
 interface Ticket {
   id: string;
@@ -58,6 +59,23 @@ type TicketUpdateForm = {
 
 const statuses: Array<'all' | Ticket['status']> = ['all', 'open', 'in-progress', 'pending', 'resolved'];
 
+const mapPriorityToApi = (priority: Ticket['priority']): TicketPriority => {
+  switch (priority) {
+    case 'urgent': return TicketPriority.URGENT;
+    case 'high': return TicketPriority.HIGH;
+    case 'medium': return TicketPriority.MEDIUM;
+    case 'low': return TicketPriority.LOW;
+  }
+};
+
+const mapStatusToApi = (status: Ticket['status']): TicketStatus => {
+  switch (status) {
+    case 'open': return TicketStatus.OPEN;
+    case 'in-progress': return TicketStatus.IN_PROGRESS;
+    case 'resolved': return TicketStatus.RESOLVED;
+  }
+};
+
 export default function TicketTabs({ tickets, statusColors, priorityColors, setTickets }: TicketTabsProps) {
   const [open, setOpen] = useState<boolean>(false);
   const [currentTicketId, setCurrentTicketId] = useState<string | null>(null);
@@ -79,37 +97,50 @@ export default function TicketTabs({ tickets, statusColors, priorityColors, setT
     return true;
   };
 
-  const handleUpdateTicket = (e: React.FormEvent) => {
+  const handleUpdateTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentTicketId || !validateForm(formData)) return;
 
-    setTickets(
-      tickets.map((ticket) =>
-        ticket.id === currentTicketId
-          ? {
-              ...ticket,
-              priority: formData.priority as Ticket['priority'],
-              status: formData.status as Ticket['status'],
-              updated: new Date().toLocaleDateString('en-US', {
-                month: 'short',
-                day: '2-digit',
-                year: 'numeric',
-              }) +
-                ' ' +
-                new Date().toLocaleTimeString('en-US', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                }),
-            }
-          : ticket
-      )
-    );
+    try {
+      const updateRequest = {
+        priority: formData.priority ? mapPriorityToApi(formData.priority) : undefined,
+        status: formData.status ? mapStatusToApi(formData.status) : undefined,
+      };
 
-    setOpen(false);
-    setCurrentTicketId(null);
-    setFormData({ priority: '', status: '' });
-    if (closeButtonRef.current) {
-      closeButtonRef.current.click();
+      await api.ticketing.updateTicket(parseInt(currentTicketId), updateRequest);
+
+      // Update local state
+      setTickets(
+        tickets.map((ticket) =>
+          ticket.id === currentTicketId
+            ? {
+                ...ticket,
+                priority: formData.priority as Ticket['priority'],
+                status: formData.status as Ticket['status'],
+                updated: new Date().toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: '2-digit',
+                  year: 'numeric',
+                }) +
+                  ' ' +
+                  new Date().toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+              }
+            : ticket
+        )
+      );
+
+      setOpen(false);
+      setCurrentTicketId(null);
+      setFormData({ priority: '', status: '' });
+      if (closeButtonRef.current) {
+        closeButtonRef.current.click();
+      }
+    } catch (error) {
+      console.error('Failed to update ticket:', error);
+      // You might want to show an error message to the user here
     }
   };
 

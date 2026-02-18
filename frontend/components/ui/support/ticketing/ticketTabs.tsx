@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/index";
 import { User, MessageSquare, Clock, Send, Trash2, X } from "lucide-react";
 import { ticketSchema } from '@/lib/api/schemas';
+import { api, TicketPriority, TicketStatus } from '@/lib/api';
 
 interface Ticket {
   id: string;
@@ -49,16 +50,41 @@ interface TicketTabsProps {
   tickets: Ticket[];
   statusColors: Record<string, string>;
   priorityColors: Record<string, string>;
+  setTickets?: React.Dispatch<React.SetStateAction<Ticket[]>>;
+  onTicketUpdate?: () => void;
 }
 
 const statuses = ["all", "open", "in-progress", "pending", "resolved"];
 
-export default function TicketTabs({ tickets: initialTickets, statusColors, priorityColors }: TicketTabsProps) {
-  const [tickets, setTickets] = useState<Ticket[]>(initialTickets);
+const mapPriorityToApi = (priority: string): TicketPriority => {
+  switch (priority) {
+    case 'urgent': return TicketPriority.URGENT;
+    case 'high': return TicketPriority.HIGH;
+    case 'medium': return TicketPriority.MEDIUM;
+    case 'low': return TicketPriority.LOW;
+    default: return TicketPriority.MEDIUM;
+  }
+};
+
+const mapStatusToApi = (status: string): TicketStatus => {
+  switch (status) {
+    case 'open': return TicketStatus.OPEN;
+    case 'in-progress': return TicketStatus.IN_PROGRESS;
+    case 'resolved': return TicketStatus.RESOLVED;
+    default: return TicketStatus.OPEN;
+  }
+};
+
+export default function TicketTabs({ tickets: initialTickets, statusColors, priorityColors, setTickets: propSetTickets, onTicketUpdate }: TicketTabsProps) {
+  const [localTickets, setLocalTickets] = useState<Ticket[]>(initialTickets);
   const [open, setOpen] = useState<boolean>(false);
   const [formData, setFormData] = useState<{ priority: string; status: string }>({ priority: '', status: '' });
   const [errors, setErrors] = useState<Partial<Record<keyof typeof formData, string>>>({});
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Use prop setTickets if provided, otherwise use local state
+  const tickets = initialTickets;
+  const setTickets = propSetTickets || setLocalTickets;
 
   const validateForm = (data: { priority: string; status: string }): boolean => {
     const result = ticketSchema.safeParse(data);
@@ -74,35 +100,70 @@ export default function TicketTabs({ tickets: initialTickets, statusColors, prio
     return true;
   };
 
-  const handleUpdateTicket = (ticketId: string) => {
+  const handleUpdateTicket = async (ticketId: string) => {
     if (!validateForm(formData)) return;
 
-    setTickets(tickets.map((ticket) =>
-      ticket.id === ticketId
-        ? {
-            ...ticket,
-            priority: formData.priority,
-            status: formData.status,
-            updated: new Date().toLocaleDateString('en-US', {
-              month: 'short',
-              day: '2-digit',
-              year: 'numeric',
-            }) + ' ' + new Date().toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
-          }
-        : ticket
-    ));
+    try {
+      const updateRequest = {
+        priority: formData.priority ? mapPriorityToApi(formData.priority) : undefined,
+        status: formData.status ? mapStatusToApi(formData.status) : undefined,
+      };
 
-    setOpen(false);
-    if (closeButtonRef.current) {
-      closeButtonRef.current.click();
+      await api.ticketing.updateTicket(parseInt(ticketId), updateRequest);
+
+      // Update local state if setTickets is provided
+      if (setTickets) {
+        setTickets(tickets.map((ticket) =>
+          ticket.id === ticketId
+            ? {
+                ...ticket,
+                priority: formData.priority || ticket.priority,
+                status: formData.status || ticket.status,
+                updated: new Date().toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: '2-digit',
+                  year: 'numeric',
+                }) + ' ' + new Date().toLocaleTimeString('en-US', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              }
+            : ticket
+        ));
+      }
+
+      // Call onTicketUpdate if provided
+      if (onTicketUpdate) {
+        onTicketUpdate();
+      }
+
+      setOpen(false);
+      if (closeButtonRef.current) {
+        closeButtonRef.current.click();
+      }
+    } catch (error) {
+      console.error('Failed to update ticket:', error);
+      // You might want to show an error message to the user here
     }
   };
 
-  const handleDeleteTicket = (ticketId: string) => {
-    setTickets(tickets.filter((ticket) => ticket.id !== ticketId));
+  const handleDeleteTicket = async (ticketId: string) => {
+    try {
+      await api.ticketing.deleteTicket(parseInt(ticketId));
+
+      // Update local state if setTickets is provided
+      if (setTickets) {
+        setTickets(tickets.filter((ticket) => ticket.id !== ticketId));
+      }
+
+      // Call onTicketUpdate if provided
+      if (onTicketUpdate) {
+        onTicketUpdate();
+      }
+    } catch (error) {
+      console.error('Failed to delete ticket:', error);
+      // You might want to show an error message to the user here
+    }
   };
 
   return (

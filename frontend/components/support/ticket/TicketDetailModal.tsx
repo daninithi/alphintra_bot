@@ -12,8 +12,7 @@ import {
   Clock, 
   User, 
   Calendar, 
-  Tag, 
-  Star,
+  Tag,
   Send,
   Phone,
   Mail,
@@ -27,7 +26,6 @@ import {
   Communication,
   TicketStatus, 
   TicketPriority,
-  CommunicationType,
   SenderType,
   CreateCommunicationRequest,
   UpdateTicketRequest,
@@ -61,9 +59,6 @@ export default function TicketDetailModal({
   const [newMessage, setNewMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [showSatisfactionRating, setShowSatisfactionRating] = useState(false);
-  const [satisfactionRating, setSatisfactionRating] = useState(0);
-  const [satisfactionFeedback, setSatisfactionFeedback] = useState('');
   
   // Agent controls
   const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -100,7 +95,6 @@ export default function TicketDetailModal({
     try {
       const request: CreateCommunicationRequest = {
         content: newMessage.trim(),
-        communicationType: CommunicationType.MESSAGE,
         isInternal: isAgentView || false
       };
 
@@ -152,29 +146,6 @@ export default function TicketDetailModal({
     }
   };
 
-  const handleSatisfactionSubmit = async () => {
-    if (satisfactionRating === 0) {
-      toast.error('Please select a rating');
-      return;
-    }
-
-    try {
-      const updatedTicket = await customerSupportApi.addSatisfactionRating(
-        ticket.ticketId,
-        satisfactionRating,
-        satisfactionFeedback.trim() || undefined
-      );
-      onTicketUpdated(updatedTicket);
-      setShowSatisfactionRating(false);
-      setSatisfactionRating(0);
-      setSatisfactionFeedback('');
-      toast.success('Thank you for your feedback!');
-    } catch (error) {
-      console.error('Failed to submit rating:', error);
-      toast.error('Failed to submit rating');
-    }
-  };
-
   const getRelativeTime = (dateString: string) => {
     return formatDistanceToNow(new Date(dateString), { addSuffix: true });
   };
@@ -183,29 +154,8 @@ export default function TicketDetailModal({
     return format(new Date(dateString), 'MMM d, yyyy at h:mm a');
   };
 
-  const getCommunicationIcon = (type: CommunicationType) => {
-    switch (type) {
-      case CommunicationType.EMAIL:
-        return <Mail className="w-4 h-4" />;
-      case CommunicationType.PHONE_LOG:
-        return <Phone className="w-4 h-4" />;
-      case CommunicationType.INTERNAL_NOTE:
-        return <Eye className="w-4 h-4" />;
-      case CommunicationType.STATUS_UPDATE:
-        return <TrendingUp className="w-4 h-4" />;
-      case CommunicationType.ESCALATION:
-        return <AlertTriangle className="w-4 h-4" />;
-      default:
-        return <MessageSquare className="w-4 h-4" />;
-    }
-  };
-
   const canUpdateTicket = isAgentView && agentId && 
     [TicketStatus.NEW, TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS, TicketStatus.ESCALATED].includes(ticket.status);
-
-  const canRateTicket = !isAgentView && 
-    [TicketStatus.RESOLVED, TicketStatus.CLOSED].includes(ticket.status) && 
-    !ticket.satisfactionRating;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -245,17 +195,10 @@ export default function TicketDetailModal({
                   Created {getRelativeTime(ticket.createdAt)}
                 </div>
                 
-                {ticket.assignedAgentName && (
+                {ticket.assigneeId && (
                   <div className="flex items-center gap-1">
                     <User className="w-4 h-4" />
-                    {ticket.assignedAgentName}
-                  </div>
-                )}
-                
-                {ticket.estimatedResolutionTime && (
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-4 h-4" />
-                    ETA: {formatDateTime(ticket.estimatedResolutionTime)}
+                    Assigned to Agent #{ticket.assigneeId}
                   </div>
                 )}
               </div>
@@ -270,26 +213,6 @@ export default function TicketDetailModal({
                       </Badge>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {ticket.satisfactionRating && (
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="flex items-center gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`w-4 h-4 ${
-                          i < ticket.satisfactionRating! 
-                            ? 'text-yellow-400 fill-current' 
-                            : 'text-gray-300'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-sm text-gray-600">
-                    Customer Rating: {ticket.satisfactionRating}/5
-                  </span>
                 </div>
               )}
             </div>
@@ -331,7 +254,7 @@ export default function TicketDetailModal({
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          {getCommunicationIcon(comm.communicationType)}
+                          <MessageSquare className="w-4 h-4" />
                           <span className="font-medium text-sm">
                             {comm.senderDisplayName || comm.senderName || 'Unknown'}
                           </span>
@@ -406,17 +329,21 @@ export default function TicketDetailModal({
                   <div className="font-medium">{formatDateTime(ticket.updatedAt)}</div>
                 </div>
                 
-                {ticket.resolvedAt && (
+                {ticket.assigneeId && (
                   <div>
-                    <span className="text-gray-500">Resolved:</span>
-                    <div className="font-medium">{formatDateTime(ticket.resolvedAt)}</div>
+                    <span className="text-gray-500">Assigned To:</span>
+                    <div className="font-medium">Agent #{ticket.assigneeId}</div>
                   </div>
                 )}
                 
-                <div>
-                  <span className="text-gray-500">Escalation Level:</span>
-                  <div className="font-medium">{ticket.escalationLevel}</div>
-                </div>
+                {ticket.errorLogs && (
+                  <div>
+                    <span className="text-gray-500">Error Logs:</span>
+                    <div className="font-medium text-xs bg-gray-100 p-2 rounded mt-1 whitespace-pre-wrap">
+                      {ticket.errorLogs}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -471,75 +398,6 @@ export default function TicketDetailModal({
               </div>
             )}
 
-            {/* Customer Satisfaction */}
-            {canRateTicket && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Rate this Support</h3>
-                
-                {!showSatisfactionRating ? (
-                  <Button
-                    onClick={() => setShowSatisfactionRating(true)}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <Star className="w-4 h-4 mr-2" />
-                    Rate Support Quality
-                  </Button>
-                ) : (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-sm text-gray-500 mb-2 block">Rating</label>
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map((rating) => (
-                          <button
-                            key={rating}
-                            type="button"
-                            onClick={() => setSatisfactionRating(rating)}
-                            className="p-1 hover:scale-110 transition-transform"
-                          >
-                            <Star
-                              className={`w-6 h-6 ${
-                                rating <= satisfactionRating
-                                  ? 'text-yellow-400 fill-current'
-                                  : 'text-gray-300'
-                              }`}
-                            />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="text-sm text-gray-500 mb-1 block">
-                        Feedback (optional)
-                      </label>
-                      <Textarea
-                        value={satisfactionFeedback}
-                        onChange={(e) => setSatisfactionFeedback(e.target.value)}
-                        placeholder="Tell us about your experience..."
-                        rows={3}
-                      />
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <Button onClick={handleSatisfactionSubmit} className="flex-1">
-                        Submit Rating
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setShowSatisfactionRating(false);
-                          setSatisfactionRating(0);
-                          setSatisfactionFeedback('');
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </DialogContent>

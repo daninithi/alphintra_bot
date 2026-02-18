@@ -118,12 +118,12 @@ export default function CryptoTable() {
                 <td
                   className={cn(
                     "px-4 py-3",
-                    coin.price_change_percentage_24h >= 0
+                    coin.price_change_percentage_24h !== null && coin.price_change_percentage_24h >= 0
                       ? "text-green-500"
                       : "text-red-500"
                   )}
                 >
-                  {coin.price_change_percentage_24h.toFixed(2)}%
+                  {coin.price_change_percentage_24h !== null ? coin.price_change_percentage_24h.toFixed(2) : 'N/A'}%
                 </td>
               </tr>
             ))}
