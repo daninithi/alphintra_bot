@@ -22,14 +22,13 @@ public class AuthenticationFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, org.springframework.cloud.gateway.filter.GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
         
-        // Skip JWT check for public endpoints and ticketing service (for development)
+        // Skip JWT check for public endpoints
         if (path.contains("/f/") || 
             path.contains("/swagger-ui.html") || 
             path.contains("/v3/api-docs") || 
             path.contains("/webjars") ||
             path.contains("/health") ||
-            path.contains("/actuator") ||
-            path.contains("/ticketing/")) {
+            path.contains("/actuator")) {
             System.out.println("Skipping JWT check for path: " + path);
             return chain.filter(exchange);
         }
