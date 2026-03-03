@@ -5,15 +5,154 @@ from datetime import datetime, timezone
 from bot_models import Order, Position, TradeHistory, BotExecution, get_db
 import logging
 import uuid
+import os
+import psycopg2
+import json
+import ccxt
 
 logger = logging.getLogger(__name__)
 
 class TradingManager:
     """Manage trading operations and database tracking."""
     
-    def __init__(self, bot_execution_id: int, user_id: int):
+    def __init__(self, bot_execution_id: int, user_id: int, environment: str = "testnet"):
         self.bot_execution_id = bot_execution_id
         self.user_id = user_id
+        self.environment = environment
+    
+    def _fetch_and_update_balance_from_binance(self) -> bool:
+        """Fetch latest balance from Binance and update wallet service database."""
+        try:
+            # Get wallet connection details from database
+            wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+            conn = psycopg2.connect(wallet_db_url)
+            cur = conn.cursor()
+            
+            cur.execute("""
+                SELECT encrypted_api_key, encrypted_secret_key, exchange_environment
+                FROM wallet_connections
+                WHERE user_id = %s 
+                  AND exchange_name = 'binance'
+                  AND is_active = true
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (self.user_id,))
+            
+            result = cur.fetchone()
+            if not result:
+                logger.warning("No wallet connection found to fetch balance")
+                cur.close()
+                conn.close()
+                return False
+            
+            api_key, secret_key, env = result
+            
+            # Initialize CCXT exchange
+            exchange = ccxt.binance({
+                'apiKey': api_key,
+                'secret': secret_key,
+                'enableRateLimit': True,
+            })
+            
+            # Set sandbox mode based on environment
+            is_sandbox = (env or "testnet").lower() == "testnet"
+            exchange.set_sandbox_mode(is_sandbox)
+            
+            # Fetch balance from Binance
+            balance_data = exchange.fetch_balance()
+            totals = balance_data.get('total', {})
+            
+            # Define relevant coins to track
+            RELEVANT_COINS = {
+                'BTC', 'ETH', 'SOL', 'DOGE', 'XRP',
+                'USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'USDE', 'USDP'
+            }
+            
+            # Build balance dictionary - only relevant coins
+            balance_dict = {}
+            for asset, total_amount in totals.items():
+                if asset not in RELEVANT_COINS:
+                    continue
+                    
+                try:
+                    total_f = float(total_amount or 0)
+                    # Skip invalid testnet values
+                    if total_f > 0 and total_f < 18000:
+                        balance_dict[asset] = total_f
+                except Exception:
+                    continue
+            
+            # Update balance in database
+            cur.execute("""
+                UPDATE wallet_connections
+                SET balance = %s,
+                    last_balance_update = NOW()
+                WHERE user_id = %s 
+                  AND exchange_name = 'binance'
+                  AND is_active = true
+            """, (json.dumps(balance_dict), self.user_id))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            logger.info(f"💰 Updated balance from Binance: {balance_dict}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to fetch and update balance from Binance: {str(e)}")
+            return False
+    
+    def _update_wallet_balance(self, currency: str, amount_change: float) -> bool:
+        """Update balance in wallet service database."""
+        try:
+            wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+            conn = psycopg2.connect(wallet_db_url)
+            cur = conn.cursor()
+            
+            # Get current balance
+            cur.execute("""
+                SELECT balance
+                FROM wallet_connections
+                WHERE user_id = %s 
+                  AND exchange_name = 'binance'
+                  AND is_active = true
+                ORDER BY created_at DESC
+                LIMIT 1
+                FOR UPDATE
+            """, (self.user_id,))
+            
+            result = cur.fetchone()
+            if not result:
+                cur.close()
+                conn.close()
+                return False
+            
+            balance_data = result[0] if isinstance(result[0], dict) else json.loads(result[0])
+            
+            # Update balance
+            current_balance = float(balance_data.get(currency, 0))
+            new_balance = current_balance + amount_change
+            balance_data[currency] = new_balance
+            
+            # Save updated balance
+            cur.execute("""
+                UPDATE wallet_connections
+                SET balance = %s,
+                    last_balance_update = NOW()
+                WHERE user_id = %s 
+                  AND exchange_name = 'binance'
+                  AND is_active = true
+            """, (json.dumps(balance_data), self.user_id))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            
+            logger.info(f"💰 Updated {currency} balance: {current_balance:,.4f} -> {new_balance:,.4f} (change: {amount_change:+,.4f})")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update wallet balance: {str(e)}")
+            return False
     
     def create_order(self, symbol: str, side: str, order_type: str, quantity: float, price: float = None) -> str:
         """
@@ -150,14 +289,32 @@ class TradingManager:
             
             actual_price = order.average_price
             
+            # Extract base and quote currencies from symbol (e.g., BTC/USDT -> BTC, USDT)
+            base_currency = order.symbol.split('/')[0] if '/' in order.symbol else order.symbol.replace('USDT', '')
+            quote_currency = order.symbol.split('/')[1] if '/' in order.symbol else 'USDT'
+            
             # Handle position logic
             if order.side == "BUY":
+                # Deduct USDT, add crypto
+                usdt_spent = actual_price * order.quantity
+                self._update_wallet_balance(quote_currency, -usdt_spent)  # Deduct USDT
+                self._update_wallet_balance(base_currency, order.quantity)  # Add crypto
+                
                 # Open or add to position
                 # Note: stop_loss and take_profit should be passed from signal context
                 self._open_position(db, order.symbol, actual_price, order.quantity, stop_loss, take_profit)
             elif order.side == "SELL":
+                # Add USDT, deduct crypto
+                usdt_received = actual_price * order.quantity
+                self._update_wallet_balance(quote_currency, usdt_received)  # Add USDT
+                self._update_wallet_balance(base_currency, -order.quantity)  # Deduct crypto
+                
                 # Close or reduce position
                 self._close_position(db, order.symbol, actual_price, order.quantity)
+            
+            # After successful trade, fetch and update balance from Binance
+            logger.info("🔄 Fetching latest balance from Binance after trade...")
+            self._fetch_and_update_balance_from_binance()
             
             db.commit()
             logger.info(f"✅ Filled order: {order_id} - {order.side} {order.quantity} {order.symbol} @ {actual_price}")

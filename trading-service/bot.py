@@ -22,7 +22,7 @@ class TradingBot:
     Runs continuously and executes trading logic at intervals.
     """
     
-    def __init__(self, strategy: BaseStrategy, setup_signals: bool = True, bot_execution_id: int = None, user_id: int = None, trading_pairs: list = None):
+    def __init__(self, strategy: BaseStrategy, setup_signals: bool = True, bot_execution_id: int = None, user_id: int = None, trading_pairs: list = None, environment: str = "testnet"):
         """
         Initialize the trading bot.
         
@@ -32,12 +32,14 @@ class TradingBot:
             bot_execution_id: Database ID of the bot execution
             user_id: User ID who owns this bot
             trading_pairs: Optional list of trading pairs to use (defaults to Config.TRADING_PAIRS)
+            environment: Trading environment - 'production' or 'testnet'
         """
-        self.logger = setup_logger("TradingBot", Config.LOG_LEVEL)
+        self.logger = setup_logger("TradingBot", environment=environment)
         self.strategy = strategy
         self.bot_execution_id = bot_execution_id
         self.user_id = user_id
         self.trading_pairs = trading_pairs if trading_pairs else Config.TRADING_PAIRS
+        self.environment = environment  # Store environment
         
         # Components
         self.exchange_manager: Optional[ExchangeManager] = None
@@ -80,7 +82,7 @@ class TradingBot:
             
             # Initialize exchange manager
             self.logger.info("🔄 Initializing exchange connections...")
-            self.exchange_manager = ExchangeManager()
+            self.exchange_manager = ExchangeManager(environment=self.environment, user_id=self.user_id)
             if not self.exchange_manager.initialize():
                 return False
             
@@ -92,7 +94,8 @@ class TradingBot:
                 self.exchange_manager,
                 self.strategy,
                 bot_execution_id=self.bot_execution_id,
-                user_id=self.user_id
+                user_id=self.user_id,
+                environment=self.environment
             )
             
             self.logger.info(f"Strategy loaded: {self.strategy.get_name()}")
@@ -194,7 +197,7 @@ class TradingBot:
             # Results table
             results = []
             
-            for symbol in Config.TRADING_PAIRS:
+            for symbol in self.trading_pairs:
                 if symbol not in all_data:
                     continue
                 
@@ -242,7 +245,7 @@ class TradingBot:
             # Step 5: Summary
             self.logger.info("\n" + "="*80)
             self.logger.info("Cycle Summary:")
-            self.logger.info(f"   Symbols analyzed: {len(Config.TRADING_PAIRS)}")
+            self.logger.info(f"   Symbols analyzed: {len(self.trading_pairs)}")
             self.logger.info(f"   Signals generated: {signals_generated}")
             self.logger.info(f"   Orders executed: {orders_executed}")
             self.logger.info("="*80)

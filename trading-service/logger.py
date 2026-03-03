@@ -8,19 +8,17 @@ from datetime import datetime
 import colorlog
 
 
-def setup_logger(name: str = "TradingBot", level: str = "INFO") -> logging.Logger:
-    """
-    Set up a logger with colored console output and file logging.
-    
-    Args:
-        name: Logger name
-        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-    
-    Returns:
-        Configured logger instance
-    """
+def setup_logger(name: str = "TradingBot", level: str = None, environment: str = None) -> logging.Logger:
+
     # Create logs directory if it doesn't exist
     os.makedirs("logs", exist_ok=True)
+    
+    # Auto-detect log level based on environment if not specified
+    if level is None:
+        if environment is None:
+            environment = os.getenv('TRADING_ENVIRONMENT', 'testnet').lower()
+        # Production: INFO level (clean logs), Others: DEBUG level (verbose for debugging)
+        level = 'INFO' if environment == 'production' else 'DEBUG'
     
     # Create logger
     logger = logging.getLogger(name)

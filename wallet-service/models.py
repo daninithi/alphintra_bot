@@ -28,6 +28,10 @@ class WalletConnection(Base):
     is_active = Column(Boolean, default=True)
     last_used_at = Column(DateTime)
     
+    # Balance tracking
+    balance = Column(JSON, default=lambda: {"USDT": 10000.0, "BTC": 0, "ETH": 0, "SOL": 0, "DOGE": 0, "XRP": 0})  # Store balances for multiple currencies
+    last_balance_update = Column(DateTime)
+    
     # Status tracking
     connection_status = Column(String(20), default='connected')  # 'connected', 'error', 'disabled'
     last_error = Column(Text)

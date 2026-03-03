@@ -27,7 +27,7 @@ class Config:
     # Trading Configuration
     TRADING_PAIRS: List[str] = os.getenv(
         "TRADING_PAIRS", 
-        "BTC/USDT,ETH/USDT,BNB/USDT,SOL/USDT,ADA/USDT,DOGE/USDT,XRP/USDT"
+        "BTC/USDT,ETH/USDT,SOL/USDT,DOGE/USDT,XRP/USDT"
     ).split(",")
     
     TIMEFRAMES: List[str] = os.getenv(
@@ -68,10 +68,7 @@ class Config:
         print(f"Timeframes: {', '.join(cls.TIMEFRAMES)}")
         print(f"Candles per Timeframe: {cls.CANDLES_LIMIT}")
         print(f"Log Level: {cls.LOG_LEVEL}")
-        print(f"Mainnet: Binance public data access (no API key required)")
-        print(f"Mode: 🔴 BINANCE TESTNET (Fake orders on testnet.binance.vision)")
-        print(f"Testnet API Key: {'*' * 20}{cls.BINANCE_TESTNET_API_KEY[-4:] if cls.BINANCE_TESTNET_API_KEY else 'NOT SET'}")
-        
+
         # Try to fetch and display testnet balance
         try:
             import ccxt

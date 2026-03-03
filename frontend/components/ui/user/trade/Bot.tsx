@@ -18,7 +18,6 @@ interface BotStatus {
   id?: number;
   bot_name: string;
   strategy_name: string;
-  coin: string;
   capital: number;
   status: string;
   last_run?: string;
@@ -33,14 +32,15 @@ interface BotProps {
 
 export default function Bot({ hasRunningBot = false, refreshTrigger = 0, onBotChange }: BotProps) {
   const [selectedStrategy, setSelectedStrategy] = useState<string>('');
-  const [selectedCoin, setSelectedCoin] = useState<string>('BTC/USDT');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [amount, setAmount] = useState(50);
+  const [amount, setAmount] = useState(5000); // Dollar amount (USDT) - half of default balance
   const [loading, setLoading] = useState(false);
   const [botStatus, setBotStatus] = useState<BotStatus | null>(null);
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [strategiesLoading, setStrategiesLoading] = useState(true);
-  const [coins] = useState<string[]>(['BTC/USDT', 'ETH/USDT', 'BNB/USDT', 'SOL/USDT', 'ADA/USDT', 'DOGE/USDT', 'XRP/USDT']);
+  const [availableBalance, setAvailableBalance] = useState(10000); // Real balance from database
+  const [balanceLoading, setBalanceLoading] = useState(true);
+
 
   // Fetch strategies from API
   useEffect(() => {
@@ -82,12 +82,55 @@ export default function Bot({ hasRunningBot = false, refreshTrigger = 0, onBotCh
     fetchStrategies();
   }, []);
 
+  // Fetch balance from API
+  useEffect(() => {
+    const fetchBalance = async () => {
+      try {
+        setBalanceLoading(true);
+        const token = getToken();
+        if (!token) {
+          console.error('No token found, cannot fetch balance');
+          return;
+        }
+
+        const response = await fetch(buildGatewayUrl('/trading/balance'), {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('Balance response:', data);
+          if (data.status === 'success' && data.data) {
+            console.log('Setting balance to:', data.data.usdt);
+            setAvailableBalance(data.data.usdt);
+          }
+        } else {
+          console.error('Failed to fetch balance:', response.status);
+        }
+      } catch (error) {
+        console.error('Failed to fetch balance:', error);
+      } finally {
+        setBalanceLoading(false);
+      }
+    };
+
+    fetchBalance();
+  }, []);
+
   // Set default strategy
   useEffect(() => {
     if (strategies.length > 0 && !selectedStrategy) {
       setSelectedStrategy(strategies[0].strategy_id);
     }
   }, [strategies, selectedStrategy]);
+
+  // Update amount to half of available balance when balance changes
+  useEffect(() => {
+    setAmount(availableBalance / 2);
+  }, [availableBalance]);
 
   // Fetch bot status on mount (auto-refresh disabled)
   useEffect(() => {
@@ -140,7 +183,7 @@ export default function Bot({ hasRunningBot = false, refreshTrigger = 0, onBotCh
         return;
       }
 
-      console.log('Starting bot with:', { strategy_id: selectedStrategy, coin: selectedCoin, capital: amount });
+      console.log('Starting bot with:', { strategy_id: selectedStrategy, capital: amount });
 
       const response = await fetch(buildGatewayUrl('/trading/start'), {
         method: 'POST',
@@ -150,7 +193,6 @@ export default function Bot({ hasRunningBot = false, refreshTrigger = 0, onBotCh
         },
         body: JSON.stringify({
           strategy_id: selectedStrategy,
-          coin: selectedCoin,
           capital: amount
         })
       });
@@ -177,7 +219,7 @@ export default function Bot({ hasRunningBot = false, refreshTrigger = 0, onBotCh
       console.log('Bot start response:', data);
       
       if (data.status === 'success') {
-        alert(`Bot started successfully! Trading ${selectedCoin} with ${amount}% capital`);
+        alert(`Bot started successfully! Trading all pairs `);
         fetchBotStatus(); // Refresh bot status
         setIsModalOpen(false);
         // Trigger parent refresh to update main panel
@@ -242,7 +284,7 @@ export default function Bot({ hasRunningBot = false, refreshTrigger = 0, onBotCh
 
   const handleCloseModal = () => {
     setIsModalOpen(false);
-    setAmount(50); 
+    setAmount(availableBalance / 2); 
   };
 
   return (
@@ -270,23 +312,6 @@ export default function Bot({ hasRunningBot = false, refreshTrigger = 0, onBotCh
                   </option>
                 ))
               )}
-            </select>
-          </div>
-
-          {/* Coin Selection */}
-          <div className="flex flex-col gap-2 flex-1">
-            <label className="text-sm font-medium">Trading Pair</label>
-            <select
-              value={selectedCoin}
-              onChange={(e) => setSelectedCoin(e.target.value)}
-              disabled={hasRunningBot}
-              className="border border-gray-100 bg-background p-2 rounded-md text-sm h-10"
-            >
-              {coins.map((coin) => (
-                <option key={coin} value={coin}>
-                  {coin}
-                </option>
-              ))}
             </select>
           </div>
 
@@ -331,53 +356,44 @@ export default function Bot({ hasRunningBot = false, refreshTrigger = 0, onBotCh
               {/* Modal Body */}
               <div className="p-6 space-y-6">
                 {/* Bot Description */}
-                <div>
-                  <h3 className="text-sm font-medium mb-2">Strategy</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {strategies.find(s => s.strategy_id === selectedStrategy)?.description}
-                  </p>
-                </div>
+               
 
                 {/* Trading Info */}
                 <div className="bg-muted p-3 rounded-md">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="space-y-2 text-sm">
                     <div>
                       <span className="text-muted-foreground">Strategy:</span>
                       <p className="font-medium">{strategies.find(s => s.strategy_id === selectedStrategy)?.name}</p>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">Trading Pair:</span>
-                      <p className="font-medium">{selectedCoin}</p>
-                    </div>
+                     <div>
+                  <p className="text-sm text-muted-foreground">
+                    {strategies.find(s => s.strategy_id === selectedStrategy)?.description}
+                  </p>
+                </div>
+                  
                   </div>
                 </div>
 
-                {/* Amount Slider */}
+                {/* Amount Input */}
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium">Capital Allocation</label>
-                    <span className="text-sm font-semibold text-[#0b9981]">{amount}%</span>
+                    <label className="text-sm font-medium">Capital Amount (USDT)</label>
+                    <span className="text-sm font-semibold text-[#0b9981]">${amount}</span>
                   </div>
                   <input
-                    type="range"
-                    min="0"
-                    max="100"
+                    type="number"
+                    min="0.01"
+                    max={availableBalance}
+                    step="0.01"
                     value={amount}
-                    onChange={(e) => setAmount(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-[#0b9981]"
+                    onChange={(e) => setAmount(Math.max(0.01, Math.min(availableBalance, Number(e.target.value))))}
+                    className="w-full border border-gray-300 dark:border-gray-600 bg-background p-2 rounded-md text-sm"
+                    placeholder="Enter amount in USDT"
                   />
                   <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>0%</span>
-                    <span>50%</span>
-                    <span>100%</span>
+                    <span>Min: $0.01</span>
+                    <span>Max: ${availableBalance.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</span>
                   </div>
-                </div>
-
-                {/* Info Message */}
-                <div className="bg-muted p-3 rounded-md">
-                  <p className="text-xs text-muted-foreground">
-                    This will allocate {amount}% of your available capital ({(amount * 100).toFixed(2)} USDT from 10,000 USDT simulation balance).
-                  </p>
                 </div>
               </div>
 

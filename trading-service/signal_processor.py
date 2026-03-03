@@ -16,12 +16,13 @@ class SignalProcessor:
     Processes trading signals from strategies and executes orders.
     """
     
-    def __init__(self, exchange_manager: ExchangeManager, strategy: BaseStrategy, bot_execution_id: int = None, user_id: int = None):
+    def __init__(self, exchange_manager: ExchangeManager, strategy: BaseStrategy, bot_execution_id: int = None, user_id: int = None, environment: str = "testnet"):
         self.exchange = exchange_manager
         self.strategy = strategy
-        self.logger = setup_logger("SignalProcessor", Config.LOG_LEVEL)
+        self.logger = setup_logger("SignalProcessor", environment=environment)
         self.bot_execution_id = bot_execution_id
         self.user_id = user_id
+        self.environment = environment
         
         # Minimum confidence threshold for executing trades (lowered to 50% for demo/testing)
         self.min_confidence = 50
@@ -33,7 +34,7 @@ class SignalProcessor:
         self.trading_manager = None
         if bot_execution_id and user_id:
             from trading_manager import TradingManager
-            self.trading_manager = TradingManager(bot_execution_id, user_id)
+            self.trading_manager = TradingManager(bot_execution_id, user_id, environment)
             self.logger.info(f"✅ Trading manager initialized for bot execution {bot_execution_id}")
     
     def process_symbol(

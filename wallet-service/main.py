@@ -12,6 +12,8 @@ from database import get_db, create_tables, engine
 from models import WalletConnection
 from ccxt.base.errors import AuthenticationError, RequestTimeout, ExchangeNotAvailable, NetworkError, DDoSProtection, RateLimitExceeded
 import jwt
+from cryptography.fernet import Fernet
+import base64
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -21,6 +23,20 @@ app = FastAPI(title="Alphintra Wallet Service", version="1.0.0")
 
 # JWT Configuration
 JWT_SECRET = os.getenv("JWT_SECRET", "zEseNVzJiNEFsxOKygzayk4hHjSp2UJMzHMwSjWWfqE=")
+
+# Encryption Configuration - Use JWT_SECRET as base for encryption key
+ENCRYPTION_KEY = base64.urlsafe_b64encode(base64.b64decode(JWT_SECRET)[:32])
+cipher_suite = Fernet(ENCRYPTION_KEY)
+
+def encrypt_credential(credential: str) -> bytes:
+    """Encrypt a credential string."""
+    return cipher_suite.encrypt(credential.encode())
+
+def decrypt_credential(encrypted_credential: bytes) -> str:
+    """Decrypt an encrypted credential."""
+    if isinstance(encrypted_credential, str):
+        encrypted_credential = encrypted_credential.encode()
+    return cipher_suite.decrypt(encrypted_credential).decode()
 
 #
 # Lightweight diagnostic helpers used as dummy placeholders to keep room for future flags.
@@ -182,10 +198,9 @@ async def connect_to_binance(
         
         if existing_connection:
             print("DEBUG: Updating existing connection...")
-            # Update existing connection
-            # Store API/Secret as plain text (INSECURE — tokens will be stored unencrypted)
-            existing_connection.encrypted_api_key = request.apiKey
-            existing_connection.encrypted_secret_key = request.secretKey
+            # Update existing connection with encrypted credentials
+            existing_connection.encrypted_api_key = encrypt_credential(request.apiKey)
+            existing_connection.encrypted_secret_key = encrypt_credential(request.secretKey)
             existing_connection.last_used_at = func.now()
             existing_connection.connection_status = 'connected'
             existing_connection.last_error = None
@@ -194,14 +209,13 @@ async def connect_to_binance(
             connection = existing_connection
         else:
              print("DEBUG: Creating new connection...")
-             # Create new connection
+             # Create new connection with encrypted credentials
              connection = WalletConnection(
                  user_id=user_id,
                  exchange_name='binance',
                  exchange_environment=normalized_env,
-                 # store plain text keys
-                 encrypted_api_key=request.apiKey,
-                 encrypted_secret_key=request.secretKey,
+                 encrypted_api_key=encrypt_credential(request.apiKey),
+                 encrypted_secret_key=encrypt_credential(request.secretKey),
                  connection_name=f"Binance Connection ({datetime.now().strftime('%Y-%m-%d')})",
                  is_active=True,
                  connection_status='connected'
@@ -250,6 +264,47 @@ async def connect_to_binance(
         db.commit()
         db.refresh(connection)
         print(f"DEBUG: Connection stored successfully with ID: {connection.uuid}")
+
+        # Fetch and store initial balances after successful connection
+        try:
+            print("DEBUG: Fetching initial balances...")
+            balance_data = await exchange.fetch_balance()
+            totals = balance_data.get('total', {}) if isinstance(balance_data, dict) else {}
+            
+            # Define relevant coins to track
+            RELEVANT_COINS = {
+                # Trading pairs
+                'BTC', 'ETH', 'SOL', 'DOGE', 'XRP',
+                # Stablecoins
+                'USDT'
+            }
+            
+            # Build balance dictionary for database - only relevant coins
+            balance_dict = {}
+            for asset, total_amount in totals.items():
+                # Skip if not a relevant coin
+                if asset not in RELEVANT_COINS:
+                    continue
+                    
+                try:
+                    total_f = float(total_amount or 0)
+                    # Skip invalid testnet values (18446 is an overflow/invalid value)
+                    if total_f > 0 and total_f < 18000:
+                        balance_dict[asset] = total_f
+                except Exception:
+                    continue
+            
+            if balance_dict:
+                import json
+                connection.balance = balance_dict
+                connection.last_balance_update = func.now()
+                db.commit()
+                print(f"DEBUG: Initial balance stored: {balance_dict}")
+            else:
+                print("DEBUG: No balances found to store")
+        except Exception as balance_error:
+            print(f"DEBUG: Could not fetch initial balance: {balance_error}")
+            # Don't fail connection if balance fetch fails
 
         success_message = "Successfully connected to Binance"
         if connection.last_error:
@@ -307,6 +362,53 @@ async def get_connection_status(
         print(f"DEBUG: Error checking connection status: {str(e)}")
         return ConnectionResponse(connected=False)
 
+@app.get("/balance")
+async def get_user_balance(
+    db: Session = Depends(get_db),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Get user's wallet balance from database (cached balance, no API call).
+    Returns balance for all currencies tracked.
+    """
+    print("DEBUG: get_user_balance called (from database)")
+    print(f"DEBUG: User ID from token: {user_id}")
+    
+    try:
+        connection = db.query(WalletConnection).filter(
+            WalletConnection.user_id == user_id,
+            WalletConnection.exchange_name == 'binance',
+            WalletConnection.is_active == True
+        ).first()
+
+        if not connection:
+            raise HTTPException(status_code=404, detail="Wallet connection not found")
+        
+        # Return balance from database
+        balance = connection.balance or {}
+        
+        # Convert to balances array format
+        balances = []
+        for asset, total in balance.items():
+            balances.append({
+                'asset': asset,
+                'free': str(total)
+            })
+        
+        print(f"DEBUG: Returning balance from database: {balance}")
+        return {
+            "status": "success",
+            "balances": balances,
+            "last_update": connection.last_balance_update.isoformat() if connection.last_balance_update else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"DEBUG: Error getting balance from DB: {str(e)}")
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Failed to get balance: {str(e)}")
+
 @app.get("/binance/balances")
 async def get_balances(
     db: Session = Depends(get_db),
@@ -330,19 +432,14 @@ async def get_balances(
         connection.last_used_at = func.now()
         db.commit()
 
-        # Read stored credentials (handles plain str or bytes)
-        def _read_key(k):
-            if isinstance(k, (bytes, bytearray)):
-                try:
-                    return k.decode()
-                except Exception:
-                    return str(k)
-            return str(k)
-
-        api_key = _read_key(connection.encrypted_api_key)
-        secret_key = _read_key(connection.encrypted_secret_key)
+        # Decrypt stored credentials
+        try:
+            api_key = decrypt_credential(connection.encrypted_api_key)
+            secret_key = decrypt_credential(connection.encrypted_secret_key)
+        except Exception as decrypt_error:
+            logger.error(f"Failed to decrypt credentials: {decrypt_error}")
+            raise HTTPException(status_code=500, detail="Failed to decrypt stored credentials")
         
-
         exchange = ccxt.binance({
             'apiKey': api_key,
             'secret': secret_key,
@@ -366,18 +463,48 @@ async def get_balances(
             free = balance_data.get('free', {}) if isinstance(balance_data, dict) else {}
             used = balance_data.get('used', {}) if isinstance(balance_data, dict) else {}
 
+            # Define relevant coins to track
+            RELEVANT_COINS = {
+                # Trading pairs
+                'BTC', 'ETH', 'SOL', 'DOGE', 'XRP',
+                # Stablecoins
+                'USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'USDE', 'USDP'
+            }
+
             balances = []
+            balance_dict = {}  # For storing in database
+            
             for asset, total_amount in totals.items():
+                # Skip if not a relevant coin
+                if asset not in RELEVANT_COINS:
+                    continue
+                    
                 try:
                     total_f = float(total_amount or 0)
                 except Exception:
                     total_f = 0.0
-                if total_f > 0:
+                    
+                # Skip invalid testnet values (18446 is an overflow/invalid value)
+                if total_f > 0 and total_f < 18000:
                     balances.append({
                         'asset': asset,
                         'free': str(free.get(asset, 0)),
                         'locked': str(used.get(asset, 0))
                     })
+                    # Store total balance for database
+                    balance_dict[asset] = total_f
+
+            # Update balance in database
+            try:
+                import json
+                connection.balance = balance_dict
+                connection.last_balance_update = func.now()
+                db.commit()
+                print(f"DEBUG: Updated balance in database (filtered): {balance_dict}")
+            except Exception as balance_update_error:
+                print(f"DEBUG: Failed to update balance in database: {balance_update_error}")
+                # Don't fail the request if balance update fails
+                pass
 
             print(f"DEBUG: Returning real balances for connection: {connection.uuid}")
             return {"balances": balances}
@@ -502,8 +629,13 @@ async def get_binance_credentials(userId: int, db: Session = Depends(get_db)):
         secret_key = connection.encrypted_secret_key
 
         print(f"DEBUG: Found credentials for userId: {userId}. Sending API Key starting with: {api_key[:5]}...")
-        return CredentialsResponse(apiKey=api_key, secretKey=secret_key)
-
+        # Decrypt credentials before returning
+        try:
+            api_key = decrypt_credential(connection.encrypted_api_key)
+            secret_key = decrypt_credential(connection.encrypted_secret_key)
+        except Exception as decrypt_error:
+            logger.error(f"Failed to decrypt credentials: {decrypt_error}")
+            raise HTTPException(status_code=500, detail="Failed to decrypt stored credentials")
     except HTTPException as he:
         raise he
     except Exception as e:

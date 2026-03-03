@@ -59,7 +59,7 @@ const VerifyEmailPage = () => {
     try {
       console.log('[Verify] OTP valid, registering user');
       const response = await authServiceApiClient.register(pending.formData);
-      console.log('[Verify] Registration succeeded', response.user.email);
+      console.log('[Verify] Registration succeeded:', { token: !!response?.token, userId: response?.user?.id, email: response?.user?.email });
       clearPendingSignup();
 
       if (typeof window !== 'undefined') {
@@ -75,13 +75,34 @@ const VerifyEmailPage = () => {
         window.location.href = '/dashboard';
       }, 1500);
     } catch (error: any) {
-      console.error('[Verify] Registration failed', error);
-      clearPendingSignup();
-      setStatus('error');
-      if (error?.response?.status === 409) {
+      const httpStatus = error?.response?.status;
+      const serverMsg: string =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.response?.data?.errors?.[0]?.defaultMessage ||
+        '';
+      console.error('[Verify] Registration failed', {
+        httpStatus,
+        serverMsg,
+        data: error?.response?.data,
+        message: error?.message,
+      });
+
+      const isDuplicate =
+        httpStatus === 409 ||
+        (httpStatus === 400 && serverMsg.toLowerCase().includes('already'));
+
+      if (isDuplicate) {
+        clearPendingSignup();
+        setStatus('error');
         setMessage('Email already registered. Please sign in instead.');
+      } else if (!error?.response && error?.message === 'Network Error') {
+        setStatus('error');
+        setMessage('Cannot reach the server. Please make sure the backend is running and try again.');
       } else {
-        setMessage('We could not complete the registration. Please try again.');
+        setStatus('error');
+        // Show the actual server error so we can see what's happening
+        setMessage(serverMsg || `Registration failed (${httpStatus || 'unknown error'}). Please try again.`);
       }
     } finally {
       setVerifyLoading(false);

@@ -24,7 +24,6 @@ class BotExecution(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False)
     strategy_name = Column(String(100), nullable=False)
-    coin = Column(String(50))  # e.g., "BTC/USDT" or "all"
     capital = Column(Float, nullable=False, default=10000)  # Allocated capital in USDT (calculated from percentage)
     status = Column(String(20), nullable=False)  # running, stopped, error
     last_run = Column(DateTime)  # Last execution time
@@ -43,7 +42,6 @@ class BotExecution(Base):
             "id": self.id,
             "user_id": self.user_id,
             "strategy_name": self.strategy_name,
-            "coin": self.coin,
             "capital": float(self.capital),
             "status": self.status,
             "last_run": self.last_run.isoformat() if self.last_run else None,

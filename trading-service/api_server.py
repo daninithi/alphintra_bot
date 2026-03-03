@@ -61,7 +61,7 @@ class InMemoryLogHandler(logging.Handler):
 class StartBotRequest(BaseModel):
     strategy_id: str  # Changed from strategy name to strategy_id (e.g., "multi-timeframe-trend-001")
     coin: Optional[str] = None  # e.g., "BTC/USDT" or None for all coins
-    capital: float = 100.0  # Capital allocation as percentage (1-100%)
+    capital: float = 100.0  # Capital allocation in USDT (minimum $1, recommended $10+)
 
 app = FastAPI(title="Alphintra Trading Service", version="1.0.0")
 
@@ -82,15 +82,13 @@ bot_status = {
     "execution_count": 0,
     "mode": "TESTNET",
     "wallet_connected": False,
-    "strategy": None,
-    "coin": None
+    "strategy": None
 }
 
 # Bot instance and thread
 bot_instance = None
 bot_thread = None
 bot_strategy_name = None  # Track selected strategy
-bot_selected_coin = None  # Track selected coin
 bot_allocated_capital = None  # Track allocated capital
 current_execution_id = None  # Track current bot execution record
 
@@ -188,24 +186,93 @@ def add_bot_log(level: str, message: str, bot_execution_id: int = None):
     if len(bot_logs) > MAX_LOG_LINES:
         bot_logs.pop(0)
 
-def get_available_balance() -> float:
-    """Get available USDT balance from testnet."""
+def get_available_balance(user_id: int = None) -> float:
+    """Get available USDT balance from wallet service database."""
+    if not user_id:
+        return 10000.0  # Default for system calls
+    
     try:
-        import ccxt
-        testnet_exchange = ccxt.binance({
-            'apiKey': Config.BINANCE_TESTNET_API_KEY,
-            'secret': Config.BINANCE_TESTNET_SECRET,
-            'enableRateLimit': True,
-        })
-        testnet_exchange.set_sandbox_mode(True)
-        testnet_exchange.options['adjustForTimeDifference'] = True
-        testnet_exchange.options['recvWindow'] = 60000
-        testnet_exchange.load_time_difference()
-        balance = testnet_exchange.fetch_balance()
-        return balance.get('USDT', {}).get('free', 10000.0)
+        # Connect to wallet database
+        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+        conn = psycopg2.connect(wallet_db_url)
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT balance
+            FROM wallet_connections
+            WHERE user_id = %s 
+              AND exchange_name = 'binance'
+              AND is_active = true
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (user_id,))
+        
+        result = cur.fetchone()
+        cur.close()
+        conn.close()
+        
+        if result and result[0]:
+            import json
+            balance_data = result[0] if isinstance(result[0], dict) else json.loads(result[0])
+            return float(balance_data.get('USDT', 10000.0))
+        else:
+            return 10000.0  # Default if no wallet connection
     except Exception as e:
-        logger.warning(f"Failed to fetch balance, using default: {str(e)}")
+        logger.warning(f"Failed to fetch balance from wallet DB, using default: {str(e)}")
         return 10000.0
+
+def update_wallet_balance(user_id: int, currency: str, amount_change: float) -> bool:
+    """Update balance in wallet service database after trade execution."""
+    try:
+        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+        conn = psycopg2.connect(wallet_db_url)
+        cur = conn.cursor()
+        
+        # Get current balance
+        cur.execute("""
+            SELECT balance
+            FROM wallet_connections
+            WHERE user_id = %s 
+              AND exchange_name = 'binance'
+              AND is_active = true
+            ORDER BY created_at DESC
+            LIMIT 1
+            FOR UPDATE
+        """, (user_id,))
+        
+        result = cur.fetchone()
+        if not result:
+            cur.close()
+            conn.close()
+            return False
+        
+        import json
+        balance_data = result[0] if isinstance(result[0], dict) else json.loads(result[0])
+        
+        # Update balance
+        current_balance = float(balance_data.get(currency, 0))
+        new_balance = current_balance + amount_change
+        balance_data[currency] = new_balance
+        
+        # Save updated balance
+        cur.execute("""
+            UPDATE wallet_connections
+            SET balance = %s,
+                last_balance_update = NOW()
+            WHERE user_id = %s 
+              AND exchange_name = 'binance'
+              AND is_active = true
+        """, (json.dumps(balance_data), user_id))
+        
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        logger.info(f"Updated {currency} balance for user {user_id}: {current_balance:,.2f} -> {new_balance:,.2f} (change: {amount_change:+,.2f})")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to update wallet balance: {str(e)}")
+        return False
 
 def check_wallet_connection(user_id: int) -> dict:
     """Check if user has an active wallet connection in wallet service"""
@@ -233,6 +300,7 @@ def check_wallet_connection(user_id: int) -> dict:
             return {
                 "connected": False,
                 "status": "not_found",
+                "environment": None,
                 "message": "No wallet connection found. Please connect your wallet first."
             }
         
@@ -242,25 +310,27 @@ def check_wallet_connection(user_id: int) -> dict:
             return {
                 "connected": True,
                 "status": status,
-                "environment": environment,
+                "environment": environment or "production",
                 "message": "Wallet connected successfully"
             }
         else:
             return {
                 "connected": False,
                 "status": status,
+                "environment": environment,
                 "message": f"Wallet connection error: {last_error or 'Unknown error'}"
             }
     except Exception as e:
         return {
             "connected": False,
             "status": "error",
+            "environment": None,
             "message": f"Failed to check wallet connection: {str(e)}"
         }
 
-def run_bot_in_thread(strategy_id: str, coin: Optional[str] = None, capital_percentage: float = 100.0, bot_execution_id: int = None, user_id: int = None):
+def run_bot_in_thread(strategy_id: str, capital_usdt: float = 100.0, bot_execution_id: int = None, user_id: int = None, environment: str = "testnet"):
     """Run the bot in a separate thread"""
-    global bot_instance, bot_strategy_name, bot_selected_coin, bot_allocated_capital
+    global bot_instance, bot_strategy_name, bot_allocated_capital
     from bot import TradingBot
     
     # Set up custom logging handler to capture all logs
@@ -274,35 +344,32 @@ def run_bot_in_thread(strategy_id: str, coin: Optional[str] = None, capital_perc
     root_logger.addHandler(log_handler)
     
     try:
-        # Prepare trading pairs list
-        bot_trading_pairs = [coin] if coin else Config.TRADING_PAIRS
-        bot_selected_coin = coin if coin else "all"
+        # Always use all trading pairs from Config.TRADING_PAIRS
+        bot_trading_pairs = Config.TRADING_PAIRS
         
-        # Calculate actual USDT from percentage using real balance
-        available_balance = get_available_balance()
-        capital_usdt = (capital_percentage / 100.0) * available_balance
+        # Use capital amount directly
         bot_allocated_capital = capital_usdt
+        available_balance = get_available_balance(user_id)
+        capital_percentage = (capital_usdt / available_balance * 100) if available_balance > 0 else 0
         
         # Log strategy selection
         add_bot_log("INFO", f"Loading strategy: {strategy_id}", bot_execution_id)
-        add_bot_log("INFO", f"Trading pair(s): {coin if coin else 'all coins'}", bot_execution_id)
-        add_bot_log("INFO", f"Capital allocation: {capital_percentage}% (${capital_usdt:,.2f} USDT of ${available_balance:,.2f} total)", bot_execution_id)
+        add_bot_log("INFO", f"Trading pairs: {', '.join(Config.TRADING_PAIRS)}", bot_execution_id)
+        add_bot_log("INFO", f"Capital allocation: ${capital_usdt:,.2f} USDT ({capital_percentage:.2f}% of ${available_balance:,.2f} total)", bot_execution_id)
         
         strategy = load_strategy(strategy_id)
         bot_strategy_name = strategy_id
-        bot_instance = TradingBot(strategy, setup_signals=False, bot_execution_id=bot_execution_id, user_id=user_id, trading_pairs=bot_trading_pairs)  # Pass execution context
+        bot_instance = TradingBot(strategy, setup_signals=False, bot_execution_id=bot_execution_id, user_id=user_id, trading_pairs=bot_trading_pairs, environment=environment)  # Pass execution context
         
         if bot_instance.initialize():
             bot_status["running"] = True
             bot_status["started_at"] = datetime.now(timezone.utc).isoformat()
             bot_status["strategy"] = strategy_id
-            bot_status["coin"] = coin if coin else "all"
             bot_instance.start()
         else:
             bot_status["running"] = False
             bot_status["started_at"] = None
             bot_status["strategy"] = None
-            bot_status["coin"] = None
     except Exception as e:
         print(f"Bot error: {str(e)}")
         import traceback
@@ -310,7 +377,6 @@ def run_bot_in_thread(strategy_id: str, coin: Optional[str] = None, capital_perc
         bot_status["running"] = False
         bot_status["started_at"] = None
         bot_status["strategy"] = None
-        bot_status["coin"] = None
     finally:
         # Remove the custom log handler when bot stops
         root_logger = logging.getLogger()
@@ -357,7 +423,7 @@ async def list_coins():
     """List available trading coins."""
     return {
         "status": "success",
-        "coins": ["BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "ADA/USDT"]
+        "coins": Config.TRADING_PAIRS
     }
 
 @app.get("/history")
@@ -384,6 +450,24 @@ async def get_bot_history(
         }
     finally:
         db.close()
+
+@app.get("/balance")
+async def get_balance(user_id: int = Depends(get_current_user_id)):
+    """Get USDT balance from wallet database."""
+    try:
+        balance = get_available_balance(user_id)
+        return {
+            "status": "success",
+            "data": {
+                "usdt": balance
+            }
+        }
+    except Exception as e:
+        logger.error(f"Failed to retrieve balance: {str(e)}")
+        return {
+            "status": "error",
+            "message": f"Failed to retrieve balance: {str(e)}"
+        }
 
 @app.get("/bot")
 async def get_bot_status_table(user_id: int = Depends(get_current_user_id)):
@@ -498,31 +582,25 @@ async def start_bot(
             "message": f"Strategy not found or you don't have access to it. Please select a valid strategy."
         }
     
-    # Validate coin if provided (use Config.TRADING_PAIRS instead of hardcoded list)
-    available_coins = Config.TRADING_PAIRS
-    if request.coin and request.coin not in available_coins:
-        return {
-            "status": "error",
-            "message": f"Invalid coin. Choose from: {', '.join(available_coins)}"
-        }
-    
     # Validate capital
     if request.capital <= 0:
         return {
             "status": "error",
-            "message": "Capital percentage must be greater than 0"
+            "message": "Capital amount must be greater than 0"
         }
     
-    if request.capital > 100:
+    # Check if capital exceeds available balance
+    available_balance = get_available_balance(user_id)
+    if available_balance <= 0:
         return {
             "status": "error",
-            "message": "Capital percentage cannot exceed 100%"
+            "message": "Your balance is 0. Please fund your account before starting the bot."
         }
     
-    if request.capital < 1:
+    if request.capital > available_balance:
         return {
             "status": "error",
-            "message": "Minimum capital is 1%"
+            "message": f"Capital amount (${request.capital:,.2f}) exceeds available balance (${available_balance:,.2f})"
         }
     
     # Check wallet connection
@@ -536,6 +614,10 @@ async def start_bot(
             "wallet_status": wallet_status,
             "bot_status": bot_status
         }
+    
+    # Get environment from wallet connection
+    trading_environment = wallet_status.get("environment", "testnet")
+    logger.info(f"🌐 Bot will trade on Binance {trading_environment.upper()}")
     
     # Check if user already has a running bot in database
     db_check = get_db()
@@ -566,22 +648,20 @@ async def start_bot(
     # Create database record
     db = get_db()
     try:
-        # Calculate actual USDT amount from percentage using real balance
-        available_balance = get_available_balance()
-        capital_usdt = (request.capital / 100.0) * available_balance
+        # Use capital amount directly (already in USDT)
+        capital_usdt = request.capital
         
         execution = BotExecution(
             user_id=user_id,
             strategy_name=request.strategy_id,  # Store strategy_id instead of name
-            coin=request.coin if request.coin else "all",
-            capital=capital_usdt,  # Store calculated USDT amount
+            capital=capital_usdt,  # Store USDT amount
             status="running"
         )
         db.add(execution)
         db.commit()
         db.refresh(execution)
         current_execution_id = execution.id
-        add_bot_log("INFO", f"Created bot execution record: ID={execution.id}, Capital: {request.capital}% (${capital_usdt:,.2f} USDT)", execution.id)
+        add_bot_log("INFO", f"Created bot execution record: ID={execution.id}, Capital: ${capital_usdt:,.2f} USDT", execution.id)
     except Exception as e:
         logger.error(f"Failed to create execution record: {str(e)}")
         db.rollback()
@@ -589,12 +669,13 @@ async def start_bot(
         db.close()
     
     # Start bot in background thread
-    bot_thread = threading.Thread(target=run_bot_in_thread, args=(request.strategy_id, request.coin, request.capital, current_execution_id, user_id), daemon=True)
+    bot_thread = threading.Thread(target=run_bot_in_thread, args=(request.strategy_id, request.capital, current_execution_id, user_id, trading_environment), daemon=True)
     bot_thread.start()
     
-    coin_msg = f" trading {request.coin}" if request.coin else " trading all coins"
-    available_balance = get_available_balance()
-    capital_usdt = (request.capital / 100.0) * available_balance
+    coin_msg = f" trading all coins ({', '.join(Config.TRADING_PAIRS)})"
+    capital_usdt = request.capital
+    available_balance = get_available_balance(user_id)
+    capital_percentage = (capital_usdt / available_balance * 100) if available_balance > 0 else 0
     
     # Get strategy name for response
     strategy_obj = next((s for s in user_strategies if s.strategy_id == request.strategy_id), None)
@@ -602,10 +683,10 @@ async def start_bot(
     
     return {
         "status": "success",
-        "message": f"Trading bot started successfully with {strategy_name} strategy{coin_msg} and {request.capital}% capital (${capital_usdt:,.2f} USDT)",
+        "message": f"Trading bot started successfully with {strategy_name} strategy{coin_msg} and ${capital_usdt:,.2f} USDT ({capital_percentage:.2f}% of balance)",
         "strategy": strategy_name,
-        "coin": request.coin if request.coin else "all",
-        "capital_percentage": request.capital,
+        "coin": "all",
+        "capital_percentage": capital_percentage,
         "capital_usdt": capital_usdt,
         "wallet_status": wallet_status,
         "bot_status": bot_status
@@ -664,7 +745,6 @@ async def stop_bot(user_id: int = Depends(get_current_user_id)):
     bot_status["running"] = False
     bot_status["started_at"] = None
     bot_status["strategy"] = None
-    bot_status["coin"] = None
     current_execution_id = None
     
     return {

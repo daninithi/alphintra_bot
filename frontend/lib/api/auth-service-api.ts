@@ -29,12 +29,18 @@ export interface RegisterCredentials {
   username: string;
   email: string;
   password: string;
-  firstName?: string;
-  lastName?: string;
 }
 
 export interface GoogleLoginCredentials {
   google_token: string;
+}
+
+// Backend raw response format
+interface BackendAuthResponse {
+  token: string;
+  userId: number;
+  username: string;
+  email: string;
 }
 
 export interface AuthResponse {
@@ -50,13 +56,22 @@ export interface UpdateProfileRequest {
 }
 
 export interface DeleteAccountRequest {
+  email: string;
   password: string;
-  confirmationText?: string;
 }
 
 export interface DeleteAccountResponse {
+  message?: string;
+  email?: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface ChangePasswordResponse {
   message: string;
-  username: string;
 }
 
 export class AuthServiceApiClient {
@@ -71,11 +86,16 @@ export class AuthServiceApiClient {
     });
 
     this.api.interceptors.request.use((config) => {
-      const token = getToken();
-      if (token) {
-        config.headers = config.headers ?? {};
-        if (!config.headers['Authorization']) {
-          config.headers['Authorization'] = `Bearer ${token}`;
+      // Don't attach token to public auth endpoints (login/register)
+      const publicPaths = ['/auth/f/login', '/auth/f/register', '/auth/admin/f/login'];
+      const isPublic = publicPaths.some(p => config.url?.includes(p));
+      if (!isPublic) {
+        const token = getToken();
+        if (token) {
+          config.headers = config.headers ?? {};
+          if (!config.headers['Authorization']) {
+            config.headers['Authorization'] = `Bearer ${token}`;
+          }
         }
       }
       return config;
@@ -92,9 +112,25 @@ export class AuthServiceApiClient {
     try {
       console.log('[AuthAPI] Attempting login to:', this.api.defaults.baseURL + '/auth/f/login');
       console.log('[AuthAPI] Credentials:', { email: credentials.email, passwordLength: credentials.password?.length });
-      const response = await this.api.post<AuthResponse>('/auth/f/login', credentials);
-      console.log('[AuthAPI] Login response received:', { hasToken: !!response.data?.token, hasUser: !!response.data?.user });
-      return response.data;
+      const response = await this.api.post<BackendAuthResponse>('/auth/f/login', credentials);
+      const backendData = response.data;
+      console.log('[AuthAPI] Login raw response:', backendData);
+      
+      // Transform backend response to expected AuthResponse format
+      const authResponse: AuthResponse = {
+        token: backendData.token,
+        user: {
+          id: backendData.userId,
+          username: backendData.username,
+          email: backendData.email,
+          kyc_status: 'NOT_STARTED',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      };
+      
+      console.log('[AuthAPI] Login response transformed:', { hasToken: !!authResponse.token, hasUser: !!authResponse.user });
+      return authResponse;
     } catch (error: any) {
       console.error('[AuthAPI] Login error:', {
         message: error.message,
@@ -108,76 +144,64 @@ export class AuthServiceApiClient {
   }
 
   async register(credentials: RegisterCredentials): Promise<AuthResponse> {
-    // Make sure keys match backend DTO fields
-    const payload = {
-      username: credentials.username,
-      email: credentials.email,
-      password: credentials.password,
-      firstName: credentials.firstName,
-      lastName: credentials.lastName,
-    };
+    try {
+      console.log('[AuthAPI] Attempting register to:', this.api.defaults.baseURL + '/auth/f/register');
+      // Only send username, email, password
+      const payload = {
+        username: credentials.username,
+        email: credentials.email,
+        password: credentials.password,
+      };
+      const response = await this.api.post<BackendAuthResponse>('/auth/f/register', payload);
+      const backendData = response.data;
+      console.log('[AuthAPI] Register raw response:', backendData);
 
-    const response = await this.api.post<AuthResponse>('/auth/f/register', payload);
+      // Validate the expected fields are present
+      if (!backendData.token) {
+        console.error('[AuthAPI] Register response missing token:', backendData);
+        throw new Error('Invalid response from server - missing token');
+      }
+
+      // Transform backend response to expected AuthResponse format
+      const authResponse: AuthResponse = {
+        token: backendData.token,
+        user: {
+          id: backendData.userId,
+          username: backendData.username,
+          email: backendData.email,
+          kyc_status: 'NOT_STARTED',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+      };
+
+      console.log('[AuthAPI] Register response transformed:', { hasToken: !!authResponse.token, hasUser: !!authResponse.user, userId: authResponse.user.id });
+      return authResponse;
+    } catch (error: any) {
+      console.error('[AuthAPI] Register error:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url,
+        baseURL: this.api.defaults.baseURL
+      });
+      throw error;
+    }
+  }
+
+  async changePassword(request: ChangePasswordRequest): Promise<ChangePasswordResponse> {
+    const response = await this.api.put<ChangePasswordResponse>('/auth/users/password', request);
     return response.data;
   }
 
-  async googleLogin(credentials: GoogleLoginCredentials): Promise<AuthResponse> {
-    const response = await this.api.post<AuthResponse>('/auth/f/google', credentials);
-    return response.data;
-  }
-
-  async getProfile(): Promise<User> {
-    const response = await this.api.get<User>('/auth/users/me');
-    return response.data;
-  }
-
-  async updateProfile(data: UpdateProfileRequest): Promise<User> {
-    // Get user email from localStorage to identify the user
-    // Try both possible storage keys
-    const userStr = localStorage.getItem('alphintra_jwt_user') || localStorage.getItem('alphintra_user');
-    if (!userStr) {
-      throw new Error('User email not found. Please log in again.');
-    }
-    
-    const user = JSON.parse(userStr);
-    const email = user.email;
-    
-    if (!email) {
-      throw new Error('User email not found. Please log in again.');
-    }
-
-    // Include email in the request body
-    const payload = {
-      email: email,
-      ...data
-    };
-
-    const response = await this.api.put<User>('/auth/users/me', payload);
-    return response.data;
-  }
-
-  async deleteAccount(): Promise<DeleteAccountResponse> {
-    // Get user email from localStorage to identify the user
-    // Try both possible storage keys
-    const userStr = localStorage.getItem('alphintra_jwt_user') || localStorage.getItem('alphintra_user');
-    if (!userStr) {
-      throw new Error('User email not found. Please log in again.');
-    }
-    
-    const user = JSON.parse(userStr);
-    const email = user.email;
-    
-    if (!email) {
-      throw new Error('User email not found. Please log in again.');
-    }
-
-    // Send email in request body using axios.request (DELETE with body)
-    const response = await this.api.request<DeleteAccountResponse>({
+  async deleteAccount(request: DeleteAccountRequest): Promise<DeleteAccountResponse> {
+    // Use axios with DELETE + body (passing data via config)
+    const response = await this.api({
       method: 'DELETE',
       url: '/auth/users/account',
-      data: { email } as any
+      data: request
     });
-    return response.data;
+    return response.data as DeleteAccountResponse;
   }
 }
 

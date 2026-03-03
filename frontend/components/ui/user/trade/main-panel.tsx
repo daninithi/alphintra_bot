@@ -596,7 +596,6 @@ const TradingBotsTable = ({ data, onOpenLogs }: { data: TradingBot[]; onOpenLogs
         <TableRow>
           <TableHead className="text-xs sm:text-sm">Bot ID</TableHead>
           <TableHead className="text-xs sm:text-sm">Strategy</TableHead>
-          <TableHead className="text-xs sm:text-sm">Coin</TableHead>
           <TableHead className="text-xs sm:text-sm">Status</TableHead>
           <TableHead className="text-xs sm:text-sm text-right">Capital (USDT)</TableHead>
           <TableHead className="text-xs sm:text-sm">Created At</TableHead>
@@ -609,7 +608,6 @@ const TradingBotsTable = ({ data, onOpenLogs }: { data: TradingBot[]; onOpenLogs
           <TableRow key={bot.id} style={{ height: ROW_HEIGHT }}>
             <TableCell className="font-medium text-xs sm:text-sm">#{bot.id}</TableCell>
             <TableCell className="text-xs sm:text-sm">{bot.strategy_name}</TableCell>
-            <TableCell className="text-xs sm:text-sm font-medium text-[#0b9981]">{bot.coin}</TableCell>
             <TableCell className="text-xs sm:text-sm">
               <Badge
                 variant={

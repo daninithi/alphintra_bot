@@ -12,8 +12,8 @@ class CustomScalpingStrategy(BaseStrategy):
     
     def __init__(self):
         super().__init__(name="My Custom Scalping Strategy")
-        self.rsi_buy = 40
-        self.rsi_sell = 60
+        self.rsi_buy = 45  # Relaxed from 40
+        self.rsi_sell = 55  # Relaxed from 60
     
     def get_description(self) -> str:
         return "Personalized scalping strategy for quick 0.5-1% gains with tight stop-loss."
@@ -45,23 +45,23 @@ class CustomScalpingStrategy(BaseStrategy):
         if rsi < self.rsi_buy and prev_macd <= prev_signal and macd > macd_signal:
             reasons.append(f"RSI oversold: {rsi:.1f}")
             reasons.append("MACD bullish crossover")
-            confidence += 50
+            confidence += 55
+            signal_type = SignalType.BUY
             
             if volume_ratio > 1.2:
                 reasons.append(f"Good volume: {volume_ratio:.1f}x")
-                confidence += 20
-                signal_type = SignalType.BUY
+                confidence += 15
         
         # SELL Signal
         elif rsi > self.rsi_sell and prev_macd >= prev_signal and macd < macd_signal:
             reasons.append(f"RSI overbought: {rsi:.1f}")
             reasons.append("MACD bearish crossover")
-            confidence += 50
+            confidence += 55
+            signal_type = SignalType.SELL
             
             if volume_ratio > 1.2:
                 reasons.append(f"Good volume: {volume_ratio:.1f}x")
-                confidence += 20
-                signal_type = SignalType.SELL
+                confidence += 15
         else:
             reasons.append(f"RSI: {rsi:.1f}, MACD: {macd:.2f}")
             confidence = 25

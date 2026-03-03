@@ -43,7 +43,7 @@ class DataFetcher:
         
         data = {}
         
-        self.logger.info(f"📥 Fetching data for {symbol} across {len(timeframes)} timeframes...")
+        self.logger.debug(f"📥 Fetching data for {symbol} across {len(timeframes)} timeframes...")
         
         for timeframe in timeframes:
             try:
@@ -67,7 +67,7 @@ class DataFetcher:
             except Exception as e:
                 self.logger.error(f"   ❌ Error fetching {timeframe} data: {str(e)}")
         
-        self.logger.info(f"✅ Fetched data for {len(data)}/{len(timeframes)} timeframes")
+        self.logger.debug(f"✅ Fetched data for {len(data)}/{len(timeframes)} timeframes")
         
         return data
     
@@ -97,7 +97,7 @@ class DataFetcher:
         
         all_data = {}
         
-        self.logger.info(
+        self.logger.debug(
             f"📥 Fetching data for {len(symbols)} symbols × {len(timeframes)} timeframes..."
         )
         
@@ -109,7 +109,7 @@ class DataFetcher:
             )
             all_data[symbol] = symbol_data
         
-        self.logger.info(f"✅ Data fetch complete for all symbols")
+        self.logger.debug(f"✅ Data fetch complete for all symbols")
         
         return all_data
     

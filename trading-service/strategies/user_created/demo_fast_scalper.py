@@ -95,8 +95,8 @@ class DemoFastScalper(BaseStrategy):
             # Calculate EMA distance as percentage
             ema_distance_pct = abs((ema9_current - ema21_current) / ema21_current) * 100
             
-            # Near-crossover threshold for aggressive demo/testing (0.5% = relatively close for demo)
-            near_crossover_threshold = 0.5
+            # Near-crossover threshold for aggressive demo/testing (1.0% = more opportunities)
+            near_crossover_threshold = 1.0
             
             # BUY Signal: EMA9 crosses above EMA21 (Golden Cross) OR very close and approaching from below
             if ema9_prev <= ema21_prev and ema9_current > ema21_current:
@@ -117,7 +117,7 @@ class DemoFastScalper(BaseStrategy):
             elif (ema9_current < ema21_current and 
                   ema_distance_pct <= near_crossover_threshold and
                   ema9_current > ema9_prev):  # EMA9 is rising toward EMA21
-                confidence = 70  # Lower confidence for near-crossover
+                confidence = 65  # Lowered for more opportunities
                 reason = f"🟡 Near Golden Cross | EMA9: {ema9_current:.2f} ({ema_distance_pct:.3f}% below EMA21) | Rising | RSI: {rsi:.1f}"
                 
                 return TradingSignal(
@@ -148,7 +148,7 @@ class DemoFastScalper(BaseStrategy):
             elif (ema9_current > ema21_current and 
                   ema_distance_pct <= near_crossover_threshold and
                   ema9_current < ema9_prev):  # EMA9 is falling toward EMA21
-                confidence = 70  # Lower confidence for near-crossover
+                confidence = 65  # Lowered for more opportunities
                 reason = f"🟡 Near Death Cross | EMA9: {ema9_current:.2f} ({ema_distance_pct:.3f}% above EMA21) | Falling | RSI: {rsi:.1f}"
                 
                 return TradingSignal(

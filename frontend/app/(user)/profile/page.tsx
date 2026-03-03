@@ -1,181 +1,54 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import BalanceCard from '@/components/ui/user/dashboard/BalanceCard';
 import ProfileCard from '@/components/ui/user/profile/profileCard';
-import { VerifyStepper } from '@/components/ui/user/profile/verifyStepper';
+import { ChangePasswordModal } from '@/components/ui/user/profile/ChangePasswordModal';
 import { authServiceApiClient } from '@/lib/api/auth-service-api';
 
-const TOKEN_STORAGE_KEY = 'alphintra_jwt_token';
 const USER_STORAGE_KEY = 'alphintra_jwt_user';
-const WALLET_CREDENTIALS_KEY = 'alphintra_wallet_credentials';
 
 interface StoredUser {
   id: number;
   email: string;
   username?: string | null;
-  userName?: string | null;
-  firstName?: string | null;
-  lastName?: string | null;
-  kycStatus?: string | null;
-  kyc_status?: string | null;
   roles?: string[];
   role?: string;
 }
 
-interface TokenClaims {
-  sub?: string;
-  roles?: string[];
-  exp?: number;
-  iat?: number;
-  [key: string]: unknown;
-}
-
-const formatDateTime = (epochSeconds?: number) => {
-  if (!epochSeconds) return null;
-  try {
-    return new Date(epochSeconds * 1000).toLocaleString();
-  } catch {
-    return null;
-  }
-};
-
 export default function Profile() {
-  const router = useRouter();
-  const [token, setToken] = useState<string | null>(null);
-  const [claims, setClaims] = useState<TokenClaims | null>(null);
   const [user, setUser] = useState<StoredUser | null>(null);
-  const [isConnectedToBinance, setIsConnectedToBinance] = useState(false);
-  const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
 
   useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
+    if (typeof window === 'undefined') return;
 
-    const storedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
     const storedUser = localStorage.getItem(USER_STORAGE_KEY);
-    const walletCredentials = localStorage.getItem(WALLET_CREDENTIALS_KEY);
-
-    // Check if Binance is connected
-    if (walletCredentials) {
-      try {
-        const credentials = JSON.parse(walletCredentials);
-        if (credentials.apiKey && credentials.secretKey) {
-          setIsConnectedToBinance(true);
-        }
-      } catch (error) {
-        console.warn('Failed to parse wallet credentials', error);
-      }
-    }
-
-    if (storedToken) {
-      setToken(storedToken);
-      try {
-        const [, payload] = storedToken.split('.');
-        if (payload) {
-          const decodedPayload = JSON.parse(atob(payload)) as TokenClaims;
-          setClaims(decodedPayload);
-        }
-      } catch (error) {
-        console.warn('Failed to decode JWT payload', error);
-        setClaims(null);
-      }
-    } else {
-      setToken(null);
-      setClaims(null);
-    }
-
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser) as StoredUser;
         setUser(parsedUser);
-        setFirstName(parsedUser.firstName || '');
-        setLastName(parsedUser.lastName || '');
       } catch (error) {
         console.warn('Failed to parse stored user', error);
         setUser(null);
       }
-    } else {
-      setUser(null);
     }
   }, []);
 
   const profileName = useMemo(() => {
     if (!user) return 'Guest Trader';
-    const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
-    return fullName || user.username || user.userName || 'Alphintra User';
+    return user.username || user.email.split('@')[0] || 'Alphintra User';
   }, [user]);
 
-  const maskedToken = useMemo(() => {
-    if (!token) return null;
-    if (token.length <= 12) return token;
-    return `${token.slice(0, 6)}…${token.slice(-6)}`;
-  }, [token]);
-
-  const derivedKycStatus = useMemo(() => {
-    if (!user) return 'NOT_AVAILABLE';
-    return user.kycStatus ?? user.kyc_status ?? 'NOT_AVAILABLE';
-  }, [user]);
-
-  const derivedRoles = useMemo(() => {
-    if (claims?.roles && claims.roles.length > 0) {
-      return claims.roles;
-    }
-    if (user?.roles && user.roles.length > 0) {
-      return user.roles;
-    }
-    if (user?.role) {
-      return [user.role];
-    }
-    return ['USER'];
-  }, [claims?.roles, user]);
-
-  const handleBinanceConnect = () => {
-    router.push('/wallet');
-  };
-
-  const handleUpdateProfile = async () => {
-    if (!user) return;
-
-    try {
-      // Call backend API to update profile
-      const updatedUser = await authServiceApiClient.updateProfile({
-        firstName,
-        lastName,
-      });
-
-      // Update localStorage with new data
-      const storedUser = {
-        ...user,
-        firstName: updatedUser.firstName,
-        lastName: updatedUser.lastName,
-      };
-
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(storedUser));
-      setUser(storedUser);
-      setIsEditingProfile(false);
-      
-      console.log('✅ Profile updated successfully:', updatedUser);
-    } catch (error) {
-      console.error('❌ Failed to update profile:', error);
-      alert('Failed to update profile. Please try again.');
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setFirstName(user?.firstName || '');
-    setLastName(user?.lastName || '');
-    setIsEditingProfile(false);
-  };
-
-  const handleForgotPassword = () => {
-    // TODO: Implement password reset flow
-    router.push('/forgot-password');
+  const handleChangePassword = async (currentPassword: string, newPassword: string) => {
+    await authServiceApiClient.changePassword({
+      currentPassword,
+      newPassword
+    });
+    alert('Password changed successfully!');
   };
 
   const handleDeleteAccount = () => {
@@ -184,25 +57,36 @@ export default function Profile() {
 
   const confirmDeleteAccount = async () => {
     if (!user) return;
+    setDeleteError('');
+
+    if (!deletePassword) {
+      setDeleteError('Password is required to delete your account');
+      return;
+    }
 
     try {
-      // Call backend API to delete account
-      await authServiceApiClient.deleteAccount();
+      await authServiceApiClient.deleteAccount({
+        email: user.email,
+        password: deletePassword
+      });
       
       console.log('✅ Account deleted successfully');
       
-      // Clear all localStorage and redirect to alphintra.com
+      // Clear all localStorage and redirect to landing page
       localStorage.clear();
-      window.location.href = 'https://alphintra.com';
+      window.location.href = '/';
     } catch (error: any) {
       console.error('❌ Failed to delete account:', error);
-      alert('Failed to delete account. Please try again.');
-      setShowDeleteConfirm(false);
+      const errorMsg = error.response?.data?.error || 'Failed to delete account. Please try again.';
+      setDeleteError(errorMsg);
     }
   };
 
   const cancelDeleteAccount = () => {
     setShowDeleteConfirm(false);
+    setDeletePassword('');
+    setDeleteError('');
+    setShowDeletePassword(false);
   };
 
   return (
@@ -214,91 +98,30 @@ export default function Profile() {
 
       <div className="md:rounded-3xl rounded-2xl border border-border bg-card p-6 md:ml-4 md:mr-7 mx-6 space-y-6">
         <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Profile Details</h2>
-            {!isEditingProfile && (
-              <button
-                onClick={() => setIsEditingProfile(true)}
-                className="px-4 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors"
-              >
-                Edit Profile
-              </button>
-            )}
-          </div>
-
+          <h2 className="text-lg font-semibold">Profile Details</h2>
           {user && (
             <div className="rounded-xl border border-muted/40 bg-muted/10 p-4">
-              {isEditingProfile ? (
-                <div className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">
-                        First Name
-                      </label>
-                      <input
-                        type="text"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                        placeholder="Enter first name"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-foreground mb-1">
-                        Last Name
-                      </label>
-                      <input
-                        type="text"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        className="w-full px-3 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-400"
-                        placeholder="Enter last name"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <button
-                      onClick={handleCancelEdit}
-                      className="px-4 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={handleUpdateProfile}
-                      className="px-4 py-2 text-sm font-medium bg-yellow-400 hover:bg-yellow-500 text-black rounded-lg transition-colors"
-                    >
-                      Save Changes
-                    </button>
-                  </div>
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="font-medium text-foreground">Email</dt>
+                  <dd className="text-muted-foreground">{user.email}</dd>
                 </div>
-              ) : (
-                <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="font-medium text-foreground">Email</dt>
-                    <dd>{user.email}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-medium text-foreground">Username</dt>
-                    <dd>{user.username ?? user.userName ?? '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-medium text-foreground">First Name</dt>
-                    <dd>{user.firstName || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-medium text-foreground">Last Name</dt>
-                    <dd>{user.lastName || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt className="font-medium text-foreground">Role</dt>
-                    <dd>{derivedRoles.join(', ')}</dd>
-                  </div>
-                </dl>
-              )}
+                <div>
+                  <dt className="font-medium text-foreground">Username</dt>
+                  <dd className="text-muted-foreground">{user.username || '—'}</dd>
+                </div>
+                <div>
+                  <dt className="font-medium text-foreground">Role</dt>
+                  <dd className="text-muted-foreground">
+                    <span className="px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-full text-xs font-medium">
+                      {user.role || 'USER'}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
             </div>
           )}
         </section>
-
 
         {/* Security Section */}
         <section className="space-y-3">
@@ -312,7 +135,7 @@ export default function Profile() {
                 </p>
               </div>
               <button
-                onClick={handleForgotPassword}
+                onClick={() => setShowChangePassword(true)}
                 className="px-4 py-2 text-sm font-medium text-foreground hover:bg-muted rounded-lg transition-colors"
               >
                 Change Password
@@ -343,6 +166,13 @@ export default function Profile() {
         </section>
       </div>
 
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+        onSubmit={handleChangePassword}
+      />
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -350,10 +180,47 @@ export default function Profile() {
             <div className="space-y-2">
               <h3 className="text-xl font-semibold text-foreground">Delete Account?</h3>
               <p className="text-sm text-muted-foreground">
-                Are you sure you want to delete your account? This action cannot be undone. 
-                All your data, including trading history, bots, and wallet connections will be permanently deleted.
+                This action cannot be undone. All your data, including trading history, bots, and wallet connections will be permanently deleted.
               </p>
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-foreground mb-1">
+                Enter your password to confirm
+              </label>
+              <div className="relative">
+                <input
+                  type={showDeletePassword ? "text" : "password"}
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  className="w-full px-3 py-2 pr-10 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-foreground"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowDeletePassword(!showDeletePassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showDeletePassword ? (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {deleteError && (
+              <div className="p-3 bg-red-500/10 border border-red-500/40 rounded-lg">
+                <p className="text-sm text-red-500">{deleteError}</p>
+              </div>
+            )}
+
             <div className="flex gap-3 justify-end">
               <button
                 onClick={cancelDeleteAccount}

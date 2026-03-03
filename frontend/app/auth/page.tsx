@@ -5,7 +5,7 @@ import { Mail, User } from 'lucide-react';
 import InputField from '../../components/auth/InputField';
 import PasswordInput from '../../components/auth/PasswordInput';
 // DEVELOPMENT: Commented out to bypass AuthProvider requirement during build
-// import { useAuth } from '../../components/auth/auth-provider';
+import { useAuth } from '../../components/auth/auth-provider';
 import { authServiceApiClient } from '../../lib/api/auth-service-api';
 import {
   EMAIL_VERIFICATION_EXPIRY_MS,
@@ -22,24 +22,15 @@ interface FormData {
   username?: string;
   email: string;
   password: string;
-  firstName?: string;
-  lastName?: string;
 }
 
 const AuthPage: React.FC = () => {
-  // DEVELOPMENT: Mock login function to bypass AuthProvider requirement
-  // const { login } = useAuth();
-  const login = async (token: string, session?: Record<string, unknown>) => {
-    console.log('Mock login called:', { token, session });
-    return { success: true };
-  };
+  const { login } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     username: '',
     email: '',
-    password: '',
-    firstName: '',
-    lastName: ''
+    password: ''
   });
   const [errors, setErrors] = useState<Partial<FormData>>({});
   const [isLoading, setIsLoading] = useState(false);
@@ -71,8 +62,6 @@ const AuthPage: React.FC = () => {
 
     if (!isLogin) {
       if (!formData.username) newErrors.username = 'Username is required';
-      if (!formData.firstName) newErrors.firstName = 'First name is required';
-      if (!formData.lastName) newErrors.lastName = 'Last name is required';
     }
 
     setErrors(newErrors);
@@ -98,28 +87,10 @@ const AuthPage: React.FC = () => {
           });
           console.log('[Login] Raw response:', response);
           
-          // Handle backend response format (user data at root level)
-          if (!response || !response.token) {
-            throw new Error('Invalid response from server - missing token');
+          // Handle backend response format (user object)
+          if (!response || !response.token || !response.user) {
+            throw new Error('Invalid response from server - missing token or user');
           }
-          
-          // Transform response to expected format if user data is at root level
-          if (!response.user && response.userId) {
-            response = {
-              token: response.token,
-              user: {
-                id: response.userId,
-                username: response.username || '',
-                email: response.email || formData.email,
-                firstName: response.firstName || '',
-                lastName: response.lastName || '',
-                kyc_status: 'NOT_STARTED',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              }
-            };
-          }
-          
           console.log('[Login] Login successful:', { userId: response.user.id, email: response.user.email });
         } catch (loginError: any) {
           console.error('[Login] Auth service error:', loginError);
@@ -144,17 +115,21 @@ const AuthPage: React.FC = () => {
 
         // Update auth context
         try {
-          await login(response.token, {
+          // Transform API user to auth user format
+          const authUser = {
             id: response.user.id.toString(),
             email: response.user.email,
+            username: response.user.username || '',
             firstName: response.user.firstName || '',
             lastName: response.user.lastName || '',
-            role: 'USER',
-            isVerified: response.user.kyc_status !== 'NOT_STARTED',
+            role: 'USER' as const,
+            isVerified: true,
             twoFactorEnabled: false,
             createdAt: response.user.created_at,
             updatedAt: response.user.updated_at
-          });
+          };
+          
+          await login(response.token, authUser);
           console.log('[Login] Auth context updated');
         } catch (contextError) {
           console.error('[Login] Failed to update auth context:', contextError);
@@ -215,8 +190,6 @@ const AuthPage: React.FC = () => {
           username: formData.username!,
           email: formData.email,
           password: formData.password,
-          firstName: formData.firstName,
-          lastName: formData.lastName,
         };
 
         try {
@@ -225,7 +198,7 @@ const AuthPage: React.FC = () => {
           await sendVerificationEmail(
             signupPayload.email,
             code,
-            signupPayload.firstName || signupPayload.email
+            signupPayload.username || signupPayload.email
           );
 
           storePendingSignup({
@@ -233,7 +206,7 @@ const AuthPage: React.FC = () => {
             email: signupPayload.email,
             code,
             expiresAt: Date.now() + EMAIL_VERIFICATION_EXPIRY_MS,
-            name: signupPayload.firstName || signupPayload.email,
+            name: signupPayload.username || signupPayload.email,
           });
 
           console.log('[Signup] Pending signup stored, redirecting to verify page');
@@ -268,9 +241,7 @@ const AuthPage: React.FC = () => {
     setFormData({
       username: '',
       email: '',
-      password: '',
-      firstName: '',
-      lastName: ''
+      password: ''
     });
     setErrors({});
     setMessage(null);
@@ -342,7 +313,7 @@ const AuthPage: React.FC = () => {
           )}
           <div className="space-y-5">
             {!isLogin && (
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <InputField
                   id="username"
                   label="Username"
@@ -352,28 +323,6 @@ const AuthPage: React.FC = () => {
                   onChange={handleInputChange}
                   placeholder="johndoe"
                   error={errors.username}
-                  Icon={User}
-                />
-                <InputField
-                  id="firstName"
-                  label="First Name"
-                  type="text"
-                  name="firstName"
-                  value={formData.firstName || ''}
-                  onChange={handleInputChange}
-                  placeholder="John"
-                  error={errors.firstName}
-                  Icon={User}
-                />
-                <InputField
-                  id="lastName"
-                  label="Last Name"
-                  type="text"
-                  name="lastName"
-                  value={formData.lastName || ''}
-                  onChange={handleInputChange}
-                  placeholder="Doe"
-                  error={errors.lastName}
                   Icon={User}
                 />
               </div>
