@@ -11,27 +11,21 @@ export const mainSidebarItems: SidebarItemType[] = [
   },
   {
     id: "users",
-    name: "Users",
+    name: "User Management",
     icon: "solar:user-line-duotone",
     url: "/users",
   },
-    {
-    id: "market",
-    name: "Market",
+  {
+    id: "trades",
+    name: "Trading Management",
     icon: "solar:chart-line-duotone",
-    url: "/marketplace",
+    url: "/trades",
   },
   {
-    id: "ticketing",
-    name: "Ticketing",
-    icon:  "solar:ticket-line-duotone",
-    url: "/ticketing",
-  },
-  {
-    id: "support",
-    name: "Support",
-    icon: "solar:help-line-duotone",
-    url: "/support",
+    id: "system-health",
+    name: "System Monitoring",
+    icon: "solar:shield-check-line-duotone",
+    url: "/system-health",
   },
 ];
 

@@ -60,6 +60,18 @@ export interface ChangePasswordResponse {
   message: string;
 }
 
+export type AdminAccountStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
+
+export interface AdminManagedUser {
+  id: number;
+  name: string;
+  email: string;
+  accountStatus: AdminAccountStatus;
+  createdDate: string;
+  lastLogin: string | null;
+  emailVerified: boolean;
+}
+
 export class AuthServiceApiClient {
   private api: ReturnType<typeof axios.create>;
 
@@ -193,6 +205,35 @@ export class AuthServiceApiClient {
       data: request
     });
     return response.data;
+  }
+
+  async getManagedUsers(): Promise<AdminManagedUser[]> {
+    const response = await this.api.get<{ users: AdminManagedUser[] }>('/auth/admin/users');
+    return response.data.users || [];
+  }
+
+  async getManagedUserById(userId: number): Promise<AdminManagedUser> {
+    const response = await this.api.get<{ user: AdminManagedUser }>(`/auth/admin/users/${userId}`);
+    return response.data.user;
+  }
+
+  async suspendManagedUser(userId: number): Promise<AdminManagedUser> {
+    const response = await this.api.put<{ user: AdminManagedUser }>(`/auth/admin/users/${userId}/suspend`);
+    return response.data.user;
+  }
+
+  async verifyManagedUser(userId: number): Promise<AdminManagedUser> {
+    const response = await this.api.put<{ user: AdminManagedUser }>(`/auth/admin/users/${userId}/verify`);
+    return response.data.user;
+  }
+
+  async resetManagedUserPassword(userId: number): Promise<string> {
+    const response = await this.api.post<{ temporaryPassword: string }>(`/auth/admin/users/${userId}/reset-password`);
+    return response.data.temporaryPassword;
+  }
+
+  async deleteManagedUser(userId: number): Promise<void> {
+    await this.api.delete(`/auth/admin/users/${userId}`);
   }
 }
 
