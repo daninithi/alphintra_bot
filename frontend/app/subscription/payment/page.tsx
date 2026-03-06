@@ -151,8 +151,9 @@ function PaymentPageContent({ searchParams }: { searchParams: URLSearchParams })
 
       const userId = parseInt(userIdStr);
 
-      // Call simple backend endpoint to activate subscription
-      const response = await fetch('https://api.alphintra.com/api/auth/activate-subscription', {
+      // Call backend endpoint via gateway to activate subscription
+      const gatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:8790';
+      const response = await fetch(`${gatewayUrl}/api/auth/activate-subscription`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

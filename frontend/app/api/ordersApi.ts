@@ -1,7 +1,8 @@
 import { getUserId } from '@/lib/auth';
+import { gatewayHttpBaseUrl } from '@/lib/config/gateway';
 
 const MARKETPLACE_API_URL =
-  process.env.NEXT_PUBLIC_MARKETPLACE_API_URL ?? 'http://api.alphintra.com';
+  process.env.NEXT_PUBLIC_MARKETPLACE_API_URL ?? gatewayHttpBaseUrl;
 
 export interface PurchasedStrategy {
   orderId: number;
