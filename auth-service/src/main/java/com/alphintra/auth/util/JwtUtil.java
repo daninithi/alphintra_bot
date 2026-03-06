@@ -54,6 +54,17 @@ public class JwtUtil {
         return extractClaims(token).getSubject();
     }
 
+    public Long extractUserId(String token) {
+        Claims claims = extractClaims(token);
+        Object userIdObj = claims.get("userId");
+        if (userIdObj instanceof Integer) {
+            return ((Integer) userIdObj).longValue();
+        } else if (userIdObj instanceof Long) {
+            return (Long) userIdObj;
+        }
+        throw new IllegalArgumentException("Invalid userId in token");
+    }
+
     public boolean isTokenValid(String token) {
         try {
             Claims claims = extractClaims(token);
