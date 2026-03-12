@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
-import { AdminManagedUser, authServiceApiClient } from "@/lib/api/auth-service-api";
+import { AdminManagedUser, UserStrategyInfo, authServiceApiClient } from "@/lib/api/auth-service-api";
 
 const displayStatus = (status: string) => status.charAt(0) + status.slice(1).toLowerCase();
 
@@ -14,6 +14,8 @@ export default function UserDetailsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [strategies, setStrategies] = useState<UserStrategyInfo[]>([]);
+  const [loadingStrategies, setLoadingStrategies] = useState(false);
 
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -38,6 +40,19 @@ export default function UserDetailsPage() {
     }
   };
 
+  const loadStrategies = async () => {
+    if (!userId || Number.isNaN(userId)) return;
+    setLoadingStrategies(true);
+    try {
+      const data = await authServiceApiClient.getUserStrategies(userId);
+      setStrategies(data);
+    } catch {
+      // Trading service may not be running; fail silently
+    } finally {
+      setLoadingStrategies(false);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -51,6 +66,7 @@ export default function UserDetailsPage() {
   useEffect(() => {
     if (mounted && isAuthenticated && userId) {
       loadUser();
+      loadStrategies();
     }
   }, [mounted, isAuthenticated, userId]);
 
@@ -193,6 +209,67 @@ export default function UserDetailsPage() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-card p-5">
+        <h2 className="text-xl font-semibold mb-4">Strategies</h2>
+        {loadingStrategies ? (
+          <p className="text-sm text-muted-foreground">Loading strategies...</p>
+        ) : strategies.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No strategies found for this user.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="bg-muted/40">
+                <tr>
+                  <th className="text-left px-4 py-3 font-semibold">Strategy</th>
+                  <th className="text-left px-4 py-3 font-semibold">Type</th>
+                  <th className="text-left px-4 py-3 font-semibold">Access</th>
+                  <th className="text-left px-4 py-3 font-semibold">Bot Status</th>
+                  <th className="text-left px-4 py-3 font-semibold">Last Run</th>
+                </tr>
+              </thead>
+              <tbody>
+                {strategies.map((s) => (
+                  <tr key={s.strategy_id} className="border-t border-border">
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{s.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{s.strategy_id}</p>
+                    </td>
+                    <td className="px-4 py-3 capitalize">
+                      {s.type === "user_created" ? "User Created" : s.type.charAt(0).toUpperCase() + s.type.slice(1)}
+                    </td>
+                    <td className="px-4 py-3 capitalize">
+                      {s.access_type === "default" ? "Default" : s.access_type === "purchased" ? "Purchased" : s.access_type === "created" ? "Created" : "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {s.bot_status === "running" ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                          <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>Running
+                        </span>
+                      ) : s.bot_status === "stopped" ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                          Stopped
+                        </span>
+                      ) : s.bot_status === "error" ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                          Error
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                          Never run
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {s.last_run ? new Date(s.last_run).toLocaleString() : "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-border bg-card p-5">

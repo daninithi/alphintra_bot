@@ -62,6 +62,17 @@ export interface ChangePasswordResponse {
 
 export type AdminAccountStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 
+export interface UserStrategyInfo {
+  strategy_id: string;
+  name: string;
+  description: string;
+  type: 'default' | 'marketplace' | 'user_created';
+  access_type: 'default' | 'purchased' | 'created' | null;
+  bot_status: 'running' | 'stopped' | 'error' | null;
+  last_run: string | null;
+  bot_started_at: string | null;
+}
+
 export interface AdminManagedUser {
   id: number;
   name: string;
@@ -234,6 +245,11 @@ export class AuthServiceApiClient {
 
   async deleteManagedUser(userId: number): Promise<void> {
     await this.api.delete(`/auth/admin/users/${userId}`);
+  }
+
+  async getUserStrategies(userId: number): Promise<UserStrategyInfo[]> {
+    const response = await this.api.get<{ status: string; data: UserStrategyInfo[] }>(`/trading/admin/users/${userId}/strategies`);
+    return response.data.data || [];
   }
 }
 
