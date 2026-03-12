@@ -199,10 +199,10 @@ export default function UserDetailsPage() {
           <p className="text-sm text-muted-foreground">Loading login history...</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[400px] text-sm">
               <thead className="bg-muted/40">
                 <tr>
-                  <th className="text-left px-4 py-3 font-semibold w-10">#</th>
+                  <th className="text-left px-4 py-3 font-semibold ">#</th>
                   <th className="text-left px-4 py-3 font-semibold">Timestamp</th>
                 </tr>
               </thead>
@@ -210,7 +210,7 @@ export default function UserDetailsPage() {
                 {loginHistory.length > 0 ? (
                   loginHistory.map((record, index) => (
                     <tr key={record.id} className="border-t border-border">
-                      <td className="px-4 py-3 text-muted-foreground w-10">{index + 1}</td>
+                      <td className="px-4 py-3 text-muted-foreground ">{index + 1}</td>
                       <td className="px-4 py-3">{new Date(record.loginAt).toLocaleString()}</td>
                     </tr>
                   ))
