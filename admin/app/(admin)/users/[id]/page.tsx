@@ -94,37 +94,6 @@ export default function UserDetailsPage() {
     }
   };
 
-  const handleResetPassword = async () => {
-    if (!user) return;
-    setActionLoading(true);
-    setMessage("");
-    setError("");
-    try {
-      const temporaryPassword = await authServiceApiClient.resetManagedUserPassword(user.id);
-      setMessage(`Password reset successful. Temporary password: ${temporaryPassword}`);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to reset password.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleVerifyUser = async () => {
-    if (!user) return;
-    setActionLoading(true);
-    setMessage("");
-    setError("");
-    try {
-      const updated = await authServiceApiClient.verifyManagedUser(user.id);
-      setUser(updated);
-      setMessage("User verified successfully.");
-    } catch (err: any) {
-      setError(err?.response?.data?.error || "Failed to verify user.");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
   const handleDelete = async () => {
     if (!user) return;
     if (!window.confirm("Are you sure you want to delete this account?")) {
@@ -231,12 +200,6 @@ export default function UserDetailsPage() {
         <div className="flex flex-wrap gap-3">
           <button disabled={actionLoading || loadingUser} onClick={handleSuspend} className="rounded-md bg-yellow-500 px-4 py-2 text-black font-medium hover:bg-yellow-600 disabled:opacity-50">
             Suspend account
-          </button>
-          <button disabled={actionLoading || loadingUser} onClick={handleResetPassword} className="rounded-md border border-border px-4 py-2 hover:bg-muted/40 disabled:opacity-50">
-            Reset password
-          </button>
-          <button disabled={actionLoading || loadingUser} onClick={handleVerifyUser} className="rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50">
-            Verify user
           </button>
           <button disabled={actionLoading || loadingUser} onClick={handleDelete} className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50">
             Delete account
