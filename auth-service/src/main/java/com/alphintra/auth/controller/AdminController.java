@@ -171,4 +171,15 @@ public class AdminController {
                     "error", e.getMessage()));
         }
     }
+
+    @GetMapping("/users/{userId}/login-history")
+    public ResponseEntity<?> getLoginHistory(@PathVariable Long userId) {
+        try {
+            return ResponseEntity.ok(Map.of(
+                    "history", adminService.getLoginHistory(userId)));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", e.getMessage()));
+        }
+    }
 }

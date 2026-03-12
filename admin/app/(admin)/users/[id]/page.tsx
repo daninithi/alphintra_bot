@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
-import { AdminManagedUser, UserStrategyInfo, authServiceApiClient } from "@/lib/api/auth-service-api";
+import { AdminManagedUser, LoginHistoryRecord, UserStrategyInfo, authServiceApiClient } from "@/lib/api/auth-service-api";
 
 const displayStatus = (status: string) => status.charAt(0) + status.slice(1).toLowerCase();
 
@@ -16,6 +16,8 @@ export default function UserDetailsPage() {
   const [error, setError] = useState("");
   const [strategies, setStrategies] = useState<UserStrategyInfo[]>([]);
   const [loadingStrategies, setLoadingStrategies] = useState(false);
+  const [loginHistory, setLoginHistory] = useState<LoginHistoryRecord[]>([]);
+  const [loadingLoginHistory, setLoadingLoginHistory] = useState(false);
 
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -53,6 +55,19 @@ export default function UserDetailsPage() {
     }
   };
 
+  const loadLoginHistory = async () => {
+    if (!userId || Number.isNaN(userId)) return;
+    setLoadingLoginHistory(true);
+    try {
+      const data = await authServiceApiClient.getUserLoginHistory(userId);
+      setLoginHistory(data);
+    } catch {
+      // fail silently
+    } finally {
+      setLoadingLoginHistory(false);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -67,6 +82,7 @@ export default function UserDetailsPage() {
     if (mounted && isAuthenticated && userId) {
       loadUser();
       loadStrategies();
+      loadLoginHistory();
     }
   }, [mounted, isAuthenticated, userId]);
 
@@ -179,36 +195,36 @@ export default function UserDetailsPage() {
 
       <section className="rounded-lg border border-border bg-card p-5">
         <h2 className="text-xl font-semibold mb-4">Login history</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-sm">
-            <thead className="bg-muted/40">
-              <tr>
-                <th className="text-left px-4 py-3 font-semibold">Timestamp</th>
-                <th className="text-left px-4 py-3 font-semibold">IP Address</th>
-                <th className="text-left px-4 py-3 font-semibold">Location</th>
-                <th className="text-left px-4 py-3 font-semibold">Device</th>
-                <th className="text-left px-4 py-3 font-semibold">Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {user?.lastLogin ? (
-                <tr className="border-t border-border">
-                  <td className="px-4 py-3">{new Date(user.lastLogin).toLocaleString()}</td>
-                  <td className="px-4 py-3">-</td>
-                  <td className="px-4 py-3">-</td>
-                  <td className="px-4 py-3">-</td>
-                  <td className="px-4 py-3">Success</td>
+        {loadingLoginHistory ? (
+          <p className="text-sm text-muted-foreground">Loading login history...</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40">
+                <tr>
+                  <th className="text-left px-4 py-3 font-semibold w-10">#</th>
+                  <th className="text-left px-4 py-3 font-semibold">Timestamp</th>
                 </tr>
-              ) : (
-                <tr className="border-t border-border">
-                  <td className="px-4 py-3 text-muted-foreground" colSpan={5}>
-                    No login history available.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {loginHistory.length > 0 ? (
+                  loginHistory.map((record, index) => (
+                    <tr key={record.id} className="border-t border-border">
+                      <td className="px-4 py-3 text-muted-foreground w-10">{index + 1}</td>
+                      <td className="px-4 py-3">{new Date(record.loginAt).toLocaleString()}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr className="border-t border-border">
+                    <td className="px-4 py-3 text-muted-foreground" colSpan={2}>
+                      No login history available.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="rounded-lg border border-border bg-card p-5">

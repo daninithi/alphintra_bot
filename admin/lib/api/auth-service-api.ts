@@ -62,6 +62,12 @@ export interface ChangePasswordResponse {
 
 export type AdminAccountStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
 
+export interface LoginHistoryRecord {
+  id: number;
+  userId: number;
+  loginAt: string;
+}
+
 export interface UserStrategyInfo {
   strategy_id: string;
   name: string;
@@ -250,6 +256,11 @@ export class AuthServiceApiClient {
   async getUserStrategies(userId: number): Promise<UserStrategyInfo[]> {
     const response = await this.api.get<{ status: string; data: UserStrategyInfo[] }>(`/trading/admin/users/${userId}/strategies`);
     return response.data.data || [];
+  }
+
+  async getUserLoginHistory(userId: number): Promise<LoginHistoryRecord[]> {
+    const response = await this.api.get<{ history: LoginHistoryRecord[] }>(`/auth/admin/users/${userId}/login-history`);
+    return response.data.history || [];
   }
 }
 

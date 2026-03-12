@@ -15,8 +15,10 @@ import com.alphintra.auth.dto.DeleteAccountRequest;
 import com.alphintra.auth.dto.LoginRequest;
 import com.alphintra.auth.model.AccountStatus;
 import com.alphintra.auth.model.Admin;
+import com.alphintra.auth.model.LoginHistory;
 import com.alphintra.auth.model.User;
 import com.alphintra.auth.repository.AdminRepository;
+import com.alphintra.auth.repository.LoginHistoryRepository;
 import com.alphintra.auth.repository.UserRepository;
 import com.alphintra.auth.util.JwtUtil;
 
@@ -38,6 +40,9 @@ public class AdminService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private LoginHistoryRepository loginHistoryRepository;
 
     public AuthResponse register(CreateUser createUser) {
         // Check if admin already exists (only one admin allowed)
@@ -201,5 +206,11 @@ public class AdminService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
         userRepository.delete(user);
+    }
+
+    public List<LoginHistory> getLoginHistory(Long userId) {
+        userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        return loginHistoryRepository.findByUserIdOrderByLoginAtDesc(userId);
     }
 }

@@ -6,7 +6,9 @@ import com.alphintra.auth.dto.CreateUser;
 import com.alphintra.auth.dto.DeleteAccountRequest;
 import com.alphintra.auth.dto.LoginRequest;
 import com.alphintra.auth.model.AccountStatus;
+import com.alphintra.auth.model.LoginHistory;
 import com.alphintra.auth.model.User;
+import com.alphintra.auth.repository.LoginHistoryRepository;
 import com.alphintra.auth.repository.UserRepository;
 import com.alphintra.auth.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,8 +18,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class AuthService {
 
+    private static final int MAX_LOGIN_HISTORY = 5;
+
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private LoginHistoryRepository loginHistoryRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -78,6 +85,20 @@ public class AuthService {
 
         user.setLastLogin(java.time.LocalDateTime.now());
         userRepository.save(user);
+
+        // Record login history, keeping only the most recent MAX_LOGIN_HISTORY entries
+        LoginHistory record = new LoginHistory();
+        record.setUserId(user.getId());
+        record.setLoginAt(java.time.LocalDateTime.now());
+        loginHistoryRepository.save(record);
+
+        long count = loginHistoryRepository.countByUserId(user.getId());
+        if (count > MAX_LOGIN_HISTORY) {
+            LoginHistory oldest = loginHistoryRepository.findTopByUserIdOrderByLoginAtAsc(user.getId());
+            if (oldest != null) {
+                loginHistoryRepository.delete(oldest);
+            }
+        }
 
         // Generate JWT token
         String token = jwtUtil.generateToken(
