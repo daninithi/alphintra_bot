@@ -872,6 +872,53 @@ async def track_strategy_usage(strategy_id: str, user_id: int = Depends(get_curr
         logger.error(f"Failed to track strategy usage: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to track usage: {str(e)}")
 
+# ============================================
+# Admin Endpoints
+# ============================================
+
+@app.get("/admin/users/{user_id}/strategies")
+async def admin_get_user_strategies(
+    user_id: int,
+    admin_user_id: int = Depends(get_current_user_id)
+):
+    """
+    Admin endpoint: get strategies and latest bot execution status for a specific user.
+    Requires a valid JWT (admin must be authenticated).
+    """
+    db = get_db()
+    try:
+        strategy_db = StrategyDB()
+        strategies = strategy_db.get_user_strategies(user_id)
+        strategy_db.close()
+
+        # Fetch all executions for this user, most recent first
+        executions = db.query(BotExecution).filter(
+            BotExecution.user_id == user_id
+        ).order_by(BotExecution.created_at.desc()).all()
+
+        # Build a map of strategy_id -> latest execution dict
+        latest_by_strategy: dict = {}
+        for execution in executions:
+            sid = execution.strategy_name
+            if sid not in latest_by_strategy:
+                latest_by_strategy[sid] = execution.to_dict()
+
+        result = []
+        for s in strategies:
+            bot_exec = latest_by_strategy.get(s.strategy_id)
+            entry = s.to_dict()
+            entry["bot_status"] = bot_exec["status"] if bot_exec else None
+            entry["last_run"] = bot_exec["last_run"] if bot_exec else None
+            entry["bot_started_at"] = bot_exec["created_at"] if bot_exec else None
+            result.append(entry)
+
+        return {"status": "success", "data": result}
+    except Exception as e:
+        logger.error(f"Admin: failed to get strategies for user {user_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch user strategies: {str(e)}")
+    finally:
+        db.close()
+
 if __name__ == "__main__":
     # Initialize database
     init_db()
