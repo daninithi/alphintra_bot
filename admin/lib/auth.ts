@@ -64,6 +64,9 @@ export const removeUser = (): void => {
 // Token expiration check
 export const isTokenExpired = (token: string): boolean => {
   try {
+    if (token.endsWith('.local-signature')) {
+      return true;
+    }
     const payload = JSON.parse(atob(token.split('.')[1]));
     const exp = payload.exp * 1000;
     return Date.now() >= exp;
