@@ -1,7 +1,8 @@
 import { Strategy } from '@/components/marketplace/types'; // Import your existing Strategy type
+import { buildGatewayUrl } from '@/lib/config/gateway';
 
-// Call the external marketplace API directly for strategy data
-const STRATEGIES_API_URL = 'http://api.alphintra.com/strategies';
+// Call the marketplace API via the gateway
+const STRATEGIES_API_URL = buildGatewayUrl('/strategies');
 
 /**
  * Fetches the list of trading strategies from the FastAPI REST service.

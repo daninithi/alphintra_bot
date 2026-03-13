@@ -1,4 +1,4 @@
-const rawGatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL ?? 'https://api.alphintra.com';
+const rawGatewayUrl = process.env.NEXT_PUBLIC_GATEWAY_URL ?? 'http://localhost:8790';
 
 const normalize = () => {
   try {
@@ -9,8 +9,8 @@ const normalize = () => {
     const wsBase = `${wsProtocol}//${parsed.host}${normalizedPath === '/' ? '' : normalizedPath}`;
     return { httpBase, wsBase };
   } catch (error) {
-    const fallbackHttp = 'https://api.alphintra.com';
-    const fallbackWs = 'ws://34.172.120.224';
+    const fallbackHttp = 'http://localhost:8790';
+    const fallbackWs = 'ws://localhost:8790';
     return { httpBase: fallbackHttp, wsBase: fallbackWs };
   }
 };
