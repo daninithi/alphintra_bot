@@ -1,0 +1,729 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom animations and styles for the Alphintra brand */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Container utility */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+/* Trading card component */
+.trading-card {
+  @apply bg-card/50 backdrop-blur-sm border border-border/50 rounded-lg p-6;
+}
+
+/* Gradient text utilities */
+.gradient-text {
+  background: linear-gradient(to right, #F87AFF, #FB93D0, #FFDD00, #C3F0B2, #2FD8FE);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 221, 0, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 221, 0, 0.5);
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 45 100% 60%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    /* High contrast dark mode - Pure black background with bright whites */
+    --background: 0 0% 0%; /* Pure black */
+    --foreground: 0 0% 100%; /* Pure white */
+    --card: 0 0% 5%; /* Very dark gray */
+    --card-foreground: 0 0% 100%; /* Pure white */
+    --popover: 0 0% 3%; /* Almost black */
+    --popover-foreground: 0 0% 100%; /* Pure white */
+    --primary: 45 100% 60%; /* Bright gold/yellow */
+    --primary-foreground: 0 0% 0%; /* Black text on bright primary */
+    --secondary: 0 0% 15%; /* Dark gray */
+    --secondary-foreground: 0 0% 100%; /* Pure white */
+    --muted: 0 0% 10%; /* Very dark gray */
+    --muted-foreground: 0 0% 85%; /* Light gray */
+    --accent: 0 0% 20%; /* Medium dark gray */
+    --accent-foreground: 0 0% 100%; /* Pure white */
+    --destructive: 0 100% 60%; /* Bright red */
+    --destructive-foreground: 0 0% 100%; /* Pure white */
+    --border: 0 0% 25%; /* Medium gray border */
+    --input: 0 0% 8%; /* Very dark input background */
+    --ring: 45 100% 60%; /* Bright gold ring */
+
+    /* High contrast trading colors */
+    --profit: 120 100% 50%; /* Bright green */
+    --loss: 0 100% 60%; /* Bright red */
+    --warning: 30 100% 60%; /* Bright orange */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Trading Platform Specific Styles */
+@layer components {
+  .profit-text {
+    @apply text-profit font-medium;
+  }
+  
+  .loss-text {
+    @apply text-loss font-medium;
+  }
+  
+  .neutral-text {
+    @apply text-muted-foreground;
+  }
+  
+  .trading-card {
+    @apply bg-card border border-border rounded-lg shadow-sm p-4;
+  }
+  
+  .metric-card {
+    @apply trading-card hover:shadow-md transition-shadow duration-200;
+  }
+  
+  .sidebar-item {
+    @apply flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground;
+  }
+  
+  .sidebar-item.active {
+    @apply bg-primary text-primary-foreground;
+  }
+  
+  .chart-container {
+    @apply w-full h-full min-h-[300px] bg-card border border-border rounded-lg p-2;
+  }
+  
+  .data-table {
+    @apply w-full border-collapse;
+  }
+  
+  .data-table th {
+    @apply px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider border-b border-border;
+  }
+  
+  .data-table td {
+    @apply px-4 py-3 text-sm border-b border-border;
+  }
+  
+  .data-table tr:hover {
+    @apply bg-muted/50;
+  }
+  
+  .strategy-block {
+    @apply bg-card border border-border rounded-lg p-3 shadow-sm cursor-grab transition-all hover:shadow-md;
+  }
+  
+  .strategy-block:active {
+    @apply cursor-grabbing;
+  }
+  
+  .form-field {
+    @apply space-y-2;
+  }
+  
+  .form-label {
+    @apply text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70;
+  }
+  
+  .form-input {
+    @apply flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  
+  .form-textarea {
+    @apply flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  
+  .btn {
+    @apply inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 hover:scale-105 active:scale-100;
+  }
+  
+  .btn-primary {
+    @apply btn bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2;
+  }
+  
+  .btn-secondary {
+    @apply btn bg-secondary text-secondary-foreground hover:bg-secondary/80 h-10 px-4 py-2;
+  }
+  
+  .btn-destructive {
+    @apply btn bg-destructive text-destructive-foreground hover:bg-destructive/90 h-10 px-4 py-2;
+  }
+  
+  .btn-outline {
+    @apply btn border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2;
+  }
+  
+  .btn-ghost {
+    @apply btn hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2;
+  }
+  
+  .btn-link {
+    @apply btn text-primary underline-offset-4 hover:underline h-10 px-4 py-2;
+  }
+  
+  .btn-sm {
+    @apply h-9 rounded-md px-3;
+  }
+  
+  .btn-lg {
+    @apply h-11 rounded-md px-8;
+  }
+  
+  .btn-icon {
+    @apply h-10 w-10;
+  }
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-muted;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-muted-foreground/30 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-muted-foreground/50;
+}
+
+/* Monaco Editor Styles */
+.monaco-editor {
+  @apply rounded-lg;
+}
+
+.monaco-editor .margin {
+  @apply bg-muted;
+}
+
+/* Chart Styles */
+.trading-chart-container {
+  @apply relative w-full h-full;
+}
+
+.trading-chart-container .tv-lightweight-charts {
+  @apply rounded-lg;
+}
+
+/* Loading Animation */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.loading-spinner {
+  @apply animate-spin rounded-full border-2 border-muted border-t-primary;
+}
+
+/* Real-time update animations */
+.profit-flash {
+  @apply animate-pulse-profit;
+}
+
+.loss-flash {
+  @apply animate-pulse-loss;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .mobile-hide {
+    @apply hidden;
+  }
+  
+  .mobile-full {
+    @apply w-full;
+  }
+  
+  .sidebar-item {
+    @apply px-2 py-1 text-xs;
+  }
+  
+  .trading-card {
+    @apply p-2;
+  }
+  
+  .data-table th,
+  .data-table td {
+    @apply px-2 py-2 text-xs;
+  }
+}
+
+/* Bot-specific styles for trading dashboard */
+:root {
+  --white: #ffffff;
+  --radius: 0.625rem;
+  --bot-background: #060819;
+  --bot-foreground: #ffffff;
+  --bot-border: #262739;
+  --bot-accent: #FFBF00;
+}
+
+body {
+  color: var(--white);
+}
+
+/* Dashboard specific background */
+.dashboard-container {
+  background-color: var(--bot-background);
+  min-height: 100vh;
+}
+
+/* Gradient borders for bot cards */
+.bot-gradient-border {
+  border: 1px solid transparent;
+  background: linear-gradient(var(--bot-background), var(--bot-background)) padding-box,
+              conic-gradient(from 45deg, rgba(71, 85, 105, 0.48) 80%, #FFD700 86%, #FFE4B5 90%, #FFD700 94%, rgba(71, 85, 105, 0.48)) border-box;
+}
+
+/* Style <option> globally */
+select option {
+  background-color: #e5e7eb; /* Tailwind gray-200 */
+  color: #111827;            /* Tailwind gray-900 (for text) */
+}
+
+.dark select option {
+  background-color: #1e293b; /* Tailwind slate-800 (dark bg) */
+  color: #f1f5f9;            /* Tailwind slate-100 (light text) */
+}
+
+/* styles/global.css or a dedicated CSS file */
+.tradingview-widget-container {
+  border: none !important; /* Remove any borders */
+  background-color: transparent; /* Let widget control its background */
+}
+
+.tradingview-widget-container__widget {
+  border: none !important; /* Ensure inner widget has no border */
+}
+
+/* Ensure the widget’s iframe or canvas doesn’t inherit unwanted styles */
+.tradingview-widget-container iframe,
+.tradingview-widget-container canvas {
+  border: none !important;
+  background-color: transparent !important; /* Let widget’s theme control background */
+}
+
+/* Override any potential yellow tint from parent components */
+.tradingview-widget-container * {
+  background: transparent !important; /* Reset any inherited backgrounds */
+}
+
+@layer utilities {
+  .shadow-md {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  .dark .shadow-md {
+    box-shadow: 0 4px 6px -1px rgba(34, 44, 62, 1), 0 2px 4px -1px rgba(34, 44, 62, 1); /* Adjusted for dark theme */
+  }
+
+  .shadow-lg {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .dark .shadow-lg {
+    box-shadow: 0 10px 15px -3px rgba(34, 44, 62, 1), 0 4px 6px -2px rgba(34, 44, 62, 1);
+  }
+
+  .hover:shadow-lg:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  }
+
+  .dark .hover:shadow-lg:hover {
+    box-shadow: 0 10px 15px -3px rgba(34, 44, 62, 1), 0 4px 6px -2px rgba(34, 44, 62, 1);
+  }
+
+  .transition-shadow {
+    transition-property: box-shadow;
+    transition-duration: 200ms;
+    transition-timing-function: ease-in-out;
+  }
+}
+/* 3D Canvas container */
+.three-canvas-container {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+@layer components {
+  /* Glassmorphism utilities */
+  .glass {
+    @apply bg-white/10 dark:bg-white/5 backdrop-blur-md border border-white/15;
+  }
+  .glass-strong {
+    @apply bg-white/15 dark:bg-white/10 backdrop-blur-xl border border-white/20 shadow-lg;
+  }
+  .glass-card {
+    @apply glass rounded-2xl shadow-lg;
+  }
+  .glass-border {
+    @apply border border-white/20;
+  }
+  .glass-gradient {
+    background: radial-gradient(1200px 600px at 0% 0%, rgba(255,221,0,0.06), transparent 60%),
+                radial-gradient(1000px 600px at 100% 0%, rgba(168,85,247,0.05), transparent 60%),
+                radial-gradient(1000px 800px at 50% 100%, rgba(34,197,94,0.05), transparent 60%);
+  }
+}
+
+/* ===== Immersive Scroll Stage (PinSection) ===== */
+.pin-orb {
+  width: 140px;
+  height: 140px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 30%, rgba(56,189,248,0.9), rgba(2,6,23,0.4) 70%),
+              radial-gradient(circle at 70% 70%, rgba(14,165,233,0.6), rgba(2,6,23,0.2) 60%);
+  border: 1px solid rgba(148,163,184,0.25);
+  box-shadow: 0 0 40px rgba(56,189,248,0.35) inset;
+  transform: translateZ(0);
+}
+
+.pin-pulse {
+  width: 220px;
+  height: 220px;
+  border-radius: 9999px;
+  border: 2px solid rgba(56,189,248,0.4);
+  box-shadow: 0 0 30px rgba(56,189,248,0.25);
+  pointer-events: none;
+}
+
+.pin-beam {
+  height: 10px;
+  width: 60%;
+  transform: translateX(0) scaleX(0);
+  background: linear-gradient(90deg, rgba(250,204,21,0.0) 0%, rgba(250,204,21,0.8) 40%, rgba(250,204,21,1) 60%, rgba(250,204,21,0.0) 100%);
+  filter: drop-shadow(0 0 10px rgba(250,204,21,0.6));
+  border-radius: 9999px;
+}
+
+.pin-candle-body {
+  width: 12px;
+  background: #f87171; /* red */
+  border: 1px solid #7f1d1d;
+  border-radius: 4px;
+  box-shadow: 0 0 6px rgba(248,113,113,0.35);
+  transition: background-color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+}
+
+.pin-candle-wick {
+  width: 2px;
+  background: #1e3a8a; /* indigo */
+  border: 1px solid #1e3a8a;
+  border-radius: 1px;
+}
+
+.pin-chip {
+  will-change: transform, opacity;
+  letter-spacing: 0.02em;
+}
+
+/* ===== Hero Robot and Enhanced Loader ===== */
+.robot {
+  display: grid;
+  place-items: center;
+  transform: translateY(0);
+  animation: robot-bob 6s ease-in-out infinite;
+}
+
+.robot-head {
+  position: relative;
+  width: 220px;
+  height: 140px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, rgba(2,6,23,0.85), rgba(2,6,23,0.6));
+  border: 1px solid rgba(148,163,184,0.2);
+  box-shadow: inset 0 0 40px rgba(56,189,248,0.15), 0 20px 60px rgba(0,0,0,0.35);
+}
+
+.robot-eye {
+  position: absolute;
+  top: 48%;
+  width: 28px;
+  height: 18px;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 40% 40%, #a7f3d0, #06b6d4 70%);
+  box-shadow: 0 0 16px rgba(6,182,212,0.55);
+  transform-origin: center;
+  animation: robot-blink 4.5s infinite ease-in-out;
+}
+.robot-eye.left { left: 64px; }
+.robot-eye.right { right: 64px; animation-delay: 1.2s; }
+
+.robot-scan {
+  position: absolute;
+  left: 12px; right: 12px; top: 56%; height: 2px;
+  background: linear-gradient(90deg, transparent, rgba(56,189,248,0.8), transparent);
+  filter: drop-shadow(0 0 8px rgba(56,189,248,0.7));
+  animation: robot-scan 2.2s linear infinite;
+}
+
+.robot-body {
+  position: relative;
+  width: 180px;
+  height: 120px;
+  margin-top: 20px;
+  border-radius: 20px 20px 28px 28px;
+  background: linear-gradient(180deg, rgba(2,6,23,0.8), rgba(2,6,23,0.5));
+  border: 1px solid rgba(148,163,184,0.2);
+}
+
+.robot-chest-led {
+  position: absolute;
+  left: 50%; top: 26px; transform: translateX(-50%);
+  width: 14px; height: 14px; border-radius: 9999px;
+  background: #22c55e;
+  box-shadow: 0 0 16px rgba(34,197,94,0.7);
+  animation: robotled 1.8s ease-in-out infinite;
+}
+
+@keyframes robot-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes robot-blink {
+  0%, 90%, 100% { transform: scaleY(1); }
+  92% { transform: scaleY(0.15); }
+  94% { transform: scaleY(1); }
+}
+@keyframes robot-scan {
+  0% { transform: translateX(-20%); opacity: 0.2; }
+  50% { transform: translateX(20%); opacity: 0.7; }
+  100% { transform: translateX(-20%); opacity: 0.2; }
+}
+@keyframes robotled {
+  0%, 100% { opacity: 0.8; }
+  50% { opacity: 1; }
+}
+
+.bot-loader {
+  position: relative;
+  border-radius: 9999px;
+  border: 1px solid rgba(148,163,184,0.25);
+  background: rgba(0,0,0,0.35);
+}
+.bot-progress { position: relative; height: 4px; border-radius: 9999px; overflow: hidden; background: rgba(255,255,255,0.1); margin-top: 6px; }
+.bot-progress-bar {
+  position: absolute; inset: 0; width: 40%;
+  background: linear-gradient(90deg, rgba(56,189,248,0.4), rgba(34,197,94,0.5), rgba(250,204,21,0.4));
+  background-size: 200% 100%;
+  animation: progress-shimmer 1.2s linear infinite;
+}
+@keyframes progress-shimmer { 0% { transform: translateX(-60%); } 100% { transform: translateX(160%); } }
+
+/* Liquid Glass Effect */
+.liquid-glass {
+  position: relative;
+  overflow: hidden;
+}
+
+.liquid-glass-effect {
+  background: linear-gradient(135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.02) 50%,
+    rgba(255, 255, 255, 0.05) 75%,
+    rgba(255, 255, 255, 0.1) 100%);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.liquid-glass-effect::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    circle at 30% 20%,
+    rgba(255, 255, 255, 0.15) 0%,
+    transparent 50%
+  ),
+  radial-gradient(
+    circle at 70% 80%,
+    rgba(255, 255, 255, 0.1) 0%,
+    transparent 50%
+  ),
+  radial-gradient(
+    circle at 40% 40%,
+    rgba(255, 255, 255, 0.08) 0%,
+    transparent 50%
+  );
+  animation: liquid-flow 15s ease-in-out infinite;
+  filter: blur(40px);
+}
+
+.liquid-glass-effect::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    45deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 70%
+  );
+  animation: liquid-shine 8s ease-in-out infinite;
+  transform: translateX(-100%);
+}
+
+@keyframes liquid-flow {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+    opacity: 0.7;
+  }
+  33% {
+    transform: rotate(120deg) scale(1.1);
+    opacity: 0.9;
+  }
+  66% {
+    transform: rotate(240deg) scale(0.9);
+    opacity: 0.8;
+  }
+}
+
+@keyframes liquid-shine {
+  0% {
+    transform: translateX(-100%) rotate(45deg);
+  }
+  50% {
+    transform: translateX(100%) rotate(45deg);
+  }
+  100% {
+    transform: translateX(100%) rotate(45deg);
+  }
+}
+
+/* Boxy Pixel Font */
+.boxy-font {
+  font-family: 'Courier New', monospace;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  font-stretch: ultra-expanded;
+  text-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1),
+    2px 2px 0 rgba(0, 0, 0, 0.3),
+    4px 4px 0 rgba(0, 0, 0, 0.2),
+    6px 6px 10px rgba(0, 0, 0, 0.5);
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  image-rendering: crisp-edges;
+  position: relative;
+}
+
+.boxy-font span {
+  display: inline-block;
+  position: relative;
+}
+
+/* Smooth Repulsion Effect */
+.repulsion-text {
+  position: relative;
+}
+
+.repulsion-text span {
+  display: inline-block;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.repulsion-text:hover span {
+  transform: translateZ(0) scale(1.05);
+}
+
+.repulsion-text:hover span:nth-child(odd) {
+  transform: translateZ(0) scale(1.05) translateX(-2px);
+}
+
+.repulsion-text:hover span:nth-child(even) {
+  transform: translateZ(0) scale(1.05) translateX(2px);
+}
+
+/* Character-level repulsion for more granular effect */
+.repulsion-text .char {
+  display: inline-block;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+}
+
+.repulsion-text:hover .char {
+  animation: repulse 0.6s ease-out forwards;
+}
+
+@keyframes repulse {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(var(--x-offset, 0), var(--y-offset, 0)) scale(1.1);
+  }
+  100% {
+    transform: translate(calc(var(--x-offset, 0) * 0.3), calc(var(--y-offset, 0) * 0.3)) scale(1.05);
+  }
+}

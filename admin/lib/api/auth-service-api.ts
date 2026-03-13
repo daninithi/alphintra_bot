@@ -25,20 +25,9 @@ export interface RegisterCredentials {
   password: string;
 }
 
-export interface GoogleLoginCredentials {
-  google_token: string;
-}
-
 export interface AuthResponse {
   user: User;
   token: string;
-}
-
-export interface UpdateProfileRequest {
-  firstName?: string;
-  lastName?: string;
-  phoneNumber?: string;
-  address?: string;
 }
 
 export interface DeleteAccountRequest {
