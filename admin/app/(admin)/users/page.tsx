@@ -90,7 +90,6 @@ export default function UsersPage() {
               <th className="text-left px-4 py-3 font-semibold">Email</th>
               <th className="text-left px-4 py-3 font-semibold">Account Status</th>
               <th className="text-left px-4 py-3 font-semibold">Created Date</th>
-              <th className="text-left px-4 py-3 font-semibold">Last Login</th>
               <th className="text-left px-4 py-3 font-semibold">Details</th>
             </tr>
           </thead>
@@ -104,7 +103,6 @@ export default function UsersPage() {
                   {displayStatus(user.accountStatus)}
                 </td>
                 <td className="px-4 py-3">{new Date(user.createdDate).toLocaleString()}</td>
-                <td className="px-4 py-3">{user.lastLogin ? new Date(user.lastLogin).toLocaleString() : "Never"}</td>
                 <td className="px-4 py-3">
                   <Link
                     href={`/users/${user.id}`}

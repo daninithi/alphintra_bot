@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Search, Filter, Clock, MessageSquare, User, Calendar, RefreshCw } from 'lucide-react';
+import { Plus, Search, Clock, MessageSquare, User, Calendar } from 'lucide-react';
 import { 
   customerSupportApi, 
   Ticket, 
@@ -75,7 +75,8 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
         : await customerSupportApi.getMyTickets(
             statusFilter !== 'ALL' ? [statusFilter as TicketStatus] : undefined, 
             currentPage, 
-            1000
+            1000,
+            userId
           );
       setTickets(response.content);
       setTotalPages(response.totalPages);
@@ -111,7 +112,7 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
   };
 
   const handleTicketUpdated = (updatedTicket: Ticket) => {
-    setTickets(prev => prev.map(t => t.ticketId === updatedTicket.ticketId ? updatedTicket : t));
+    setTickets(prev => prev.map(t => t.id === updatedTicket.id ? updatedTicket : t));
     setSelectedTicket(updatedTicket);
   };
 
@@ -134,9 +135,9 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
 
   const EmptyState = () => (
     <div className="text-center py-12">
-      <MessageSquare className="w-12 h-12 mx-auto text-gray-400" />
-      <h3 className="mt-4 text-lg font-medium text-gray-900">No tickets found</h3>
-      <p className="mt-2 text-gray-600">
+      <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground" />
+      <h3 className="mt-4 text-lg font-medium text-foreground">No tickets found</h3>
+      <p className="mt-2 text-muted-foreground">
         {isAgentView 
           ? "No tickets match your current filters"
           : "You haven't created any support tickets yet"
@@ -160,7 +161,7 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
                   <Input
                     placeholder="Search tickets..."
                     value={searchTerm}
@@ -235,11 +236,11 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
             <Card key={i}>
               <CardContent className="pt-6">
                 <div className="animate-pulse space-y-4">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                  <div className="h-4 bg-muted rounded w-3/4"></div>
+                  <div className="h-3 bg-muted rounded w-1/2"></div>
                   <div className="flex gap-2">
-                    <div className="h-6 bg-gray-200 rounded w-16"></div>
-                    <div className="h-6 bg-gray-200 rounded w-20"></div>
+                    <div className="h-6 bg-muted rounded w-16"></div>
+                    <div className="h-6 bg-muted rounded w-20"></div>
                   </div>
                 </div>
               </CardContent>
@@ -252,8 +253,8 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
         <div className="space-y-4">
           {(tickets || []).map((ticket) => (
             <Card 
-              key={ticket.ticketId} 
-              className="cursor-pointer hover:shadow-md transition-shadow"
+              key={ticket.id} 
+              className="cursor-pointer hover:shadow-md hover:bg-accent/30 transition-shadow"
               onClick={() => handleTicketClick(ticket)}
             >
               <CardContent className="pt-6">
@@ -261,26 +262,24 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       {getTicketIcon(ticket.status)}
-                      <span className="text-sm font-medium text-gray-600">
-                        #{ticket.ticketId}
-                      </span>
+
                       <Badge className={getStatusColor(ticket.status)}>
                         {formatStatus(ticket.status)}
                       </Badge>
-                      <Badge className={getPriorityColor(ticket.priority)}>
-                        {formatPriority(ticket.priority)}
+                      <Badge className={getPriorityColor(ticket.priority ?? TicketPriority.MEDIUM)}>
+                        {formatPriority(ticket.priority ?? TicketPriority.MEDIUM)}
                       </Badge>
                     </div>
                     
-                    <h3 className="text-lg font-medium text-gray-900 truncate mb-1">
+                    <h3 className="text-lg font-medium text-foreground truncate mb-1">
                       {ticket.title}
                     </h3>
                     
-                    <p className="text-gray-600 text-sm mb-3 line-clamp-2">
+                    <p className="text-muted-foreground text-sm mb-3 line-clamp-2">
                       {ticket.description}
                     </p>
                     
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Calendar className="w-4 h-4" />
                         {getRelativeTime(ticket.createdAt)}
@@ -293,12 +292,6 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
                         </div>
                       )}
                       
-                      {ticket.communicationCount && ticket.communicationCount > 0 && (
-                        <div className="flex items-center gap-1">
-                          <MessageSquare className="w-4 h-4" />
-                          {ticket.communicationCount} message{ticket.communicationCount !== 1 ? 's' : ''}
-                        </div>
-                      )}
                     </div>
                   </div>
                   
@@ -306,9 +299,6 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
                     <Badge variant="outline">
                       {formatCategory(ticket.category)}
                     </Badge>
-                    {ticket.hasUnreadMessages && (
-                      <div className="w-2 h-2 bg-blue-500 rounded-full mt-2 ml-auto"></div>
-                    )}
                   </div>
                 </div>
               </CardContent>
@@ -328,7 +318,7 @@ export default function TicketList({ userId, userEmail, isAgentView = false, age
             Previous
           </Button>
           
-          <span className="flex items-center px-3 py-2 text-sm text-gray-600">
+          <span className="flex items-center px-3 py-2 text-sm text-muted-foreground">
             Page {page + 1} of {totalPages}
           </span>
           

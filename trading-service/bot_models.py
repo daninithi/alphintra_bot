@@ -8,11 +8,11 @@ from datetime import datetime, timezone
 import os
 
 # Use TRADING_DATABASE_URL first, fallback to DATABASE_URL, then default to trading DB
-DATABASE_URL = os.getenv("TRADING_DATABASE_URL") or os.getenv("DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_trading")
+DATABASE_URL = os.getenv("TRADING_DATABASE_URL") or os.getenv("DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_trading")
 
 # If DATABASE_URL points to wallet DB, override it with trading DB
 if "alphintra_wallet" in DATABASE_URL:
-    DATABASE_URL = "postgresql://alphintra:alphintra123@localhost:5432/alphintra_trading"
+    DATABASE_URL = "postgresql://myapp:alphintra123@localhost:5432/alphintra_trading"
     print(f"DATABASE_URL was pointing to wallet DB, overriding to trading DB")
 
 Base = declarative_base()

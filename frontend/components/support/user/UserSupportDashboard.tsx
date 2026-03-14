@@ -8,6 +8,7 @@ import {
   customerSupportApi, 
   Ticket, 
   TicketStats,
+  TicketPriority,
   TicketStatus,
   formatStatus,
   formatPriority,
@@ -38,11 +39,11 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
     setLoading(true);
     try {
       // Load recent tickets (last 3)
-      const ticketsResponse = await customerSupportApi.getMyTickets(undefined, 0, 3);
+      const ticketsResponse = await customerSupportApi.getMyTickets(undefined, 0, 3, userId);
       setRecentTickets(ticketsResponse?.content || []);
 
       // Load user stats
-      const statsResponse = await customerSupportApi.getTicketStats();
+      const statsResponse = await customerSupportApi.getTicketStats(undefined, undefined, userId);
       setStats(statsResponse);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
@@ -91,16 +92,9 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
               >
                 <ArrowLeft className="w-4 h-4" />
               </Button>
-              <h1 className="text-2xl font-bold text-gray-900">All My Tickets</h1>
+              <h1 className="text-2xl font-bold text-foreground">All My Tickets</h1>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => window.location.reload()}
-              className="flex items-center gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </Button>
+
           </div>
           
           <TicketList userId={userId} />
@@ -115,8 +109,8 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
                 <Card key={i}>
                   <CardContent className="pt-6">
                     <div className="animate-pulse space-y-3">
-                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                      <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-4 bg-muted rounded w-3/4"></div>
+                      <div className="h-8 bg-muted rounded w-1/2"></div>
                     </div>
                   </CardContent>
                 </Card>
@@ -128,8 +122,8 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Tickets</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.totalTickets}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Total Tickets</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.totalTickets}</p>
                 </div>
                 <MessageSquare className="w-8 h-8 text-blue-500" />
               </div>
@@ -140,8 +134,8 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Resolved</p>
-                  <p className="text-2xl font-bold text-gray-900">{stats.resolvedTickets}</p>
+                  <p className="text-sm font-medium text-muted-foreground">Resolved</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.resolvedTickets}</p>
                 </div>
                 <CheckCircle className="w-8 h-8 text-green-500" />
               </div>
@@ -152,8 +146,8 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Avg Resolution</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm font-medium text-muted-foreground">Avg Resolution</p>
+                  <p className="text-2xl font-bold text-foreground">
                     {Math.round(stats.averageResolutionTimeHours)}h
                   </p>
                 </div>
@@ -173,7 +167,7 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Button 
               variant="outline" 
               className="h-20 flex flex-col gap-2"
@@ -192,14 +186,6 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
               <span>View All Tickets</span>
             </Button>
             
-            <Button 
-              variant="outline" 
-              className="h-20 flex flex-col gap-2"
-              onClick={() => window.open('/help', '_blank')}
-            >
-              <HelpCircle className="w-6 h-6" />
-              <span>Browse Help Center</span>
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -219,21 +205,21 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
           {loading ? (
             <div className="space-y-4">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="animate-pulse border rounded-lg p-4">
-                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+                <div key={i} className="animate-pulse border border-border rounded-lg p-4">
+                  <div className="h-4 bg-muted rounded w-3/4 mb-2"></div>
+                  <div className="h-3 bg-muted rounded w-1/2 mb-2"></div>
                   <div className="flex gap-2">
-                    <div className="h-6 bg-gray-200 rounded w-16"></div>
-                    <div className="h-6 bg-gray-200 rounded w-20"></div>
+                    <div className="h-6 bg-muted rounded w-16"></div>
+                    <div className="h-6 bg-muted rounded w-20"></div>
                   </div>
                 </div>
               ))}
             </div>
           ) : !recentTickets || recentTickets.length === 0 ? (
             <div className="text-center py-12">
-              <MessageSquare className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No tickets yet</h3>
-              <p className="text-gray-600 mb-4">
+              <MessageSquare className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">No tickets yet</h3>
+              <p className="text-muted-foreground mb-4">
                 You haven't created any support tickets. Get help by creating your first ticket.
               </p>
               <Button onClick={() => setShowCreateModal(true)}>
@@ -245,31 +231,28 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
             <div className="space-y-4">
               {recentTickets.map((ticket) => (
                 <div 
-                  key={ticket.ticketId} 
-                  className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                  key={ticket.id} 
+                  className="border border-border rounded-lg p-4 hover:shadow-md hover:bg-accent/30 transition-shadow cursor-pointer"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
                       {getStatusIcon(ticket.status)}
-                      <span className="text-sm font-medium text-gray-600">
-                        #{ticket.ticketId}
-                      </span>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(ticket.status)}`}>
                         {formatStatus(ticket.status)}
                       </span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority)}`}>
-                        {formatPriority(ticket.priority)}
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(ticket.priority ?? TicketPriority.MEDIUM)}`}>
+                        {formatPriority(ticket.priority ?? TicketPriority.MEDIUM)}
                       </span>
                     </div>
                   </div>
                   
-                  <h3 className="font-medium text-gray-900 mb-1">
+                  <h3 className="font-medium text-foreground mb-1">
                     {ticket.title}
                   </h3>
                   
-                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                  <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
                     {ticket.description}
                   </p>
                 </div>
@@ -279,48 +262,6 @@ export default function UserSupportDashboard({ userId }: UserSupportDashboardPro
         </CardContent>
       </Card>
 
-      {/* Common Issues */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <HelpCircle className="w-5 h-5" />
-            Common Issues
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <h4 className="font-medium text-gray-900">Trading Issues</h4>
-              <div className="space-y-2 text-sm">
-                <button className="text-left text-blue-600 hover:text-blue-800 block">
-                  Cannot connect to trading platform
-                </button>
-                <button className="text-left text-blue-600 hover:text-blue-800 block">
-                  Strategy execution problems
-                </button>
-                <button className="text-left text-blue-600 hover:text-blue-800 block">
-                  Broker integration issues
-                </button>
-              </div>
-            </div>
-            
-            <div className="space-y-3">
-              <h4 className="font-medium text-gray-900">Account & Billing</h4>
-              <div className="space-y-2 text-sm">
-                <button className="text-left text-blue-600 hover:text-blue-800 block">
-                  Subscription questions
-                </button>
-                <button className="text-left text-blue-600 hover:text-blue-800 block">
-                  Payment issues
-                </button>
-                <button className="text-left text-blue-600 hover:text-blue-800 block">
-                  Account verification
-                </button>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
         </>
       )}
 

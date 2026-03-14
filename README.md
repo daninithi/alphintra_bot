@@ -49,7 +49,7 @@ cd ticketing-service
 ```bash
 cd wallet-service
 source venv/bin/activate
-export DATABASE_URL="postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet"
+export DATABASE_URL="postgresql://myapp:alphintra123@localhost:5432/alphintra_wallet"
 uvicorn main:app --reload --port 8000
 ```
 

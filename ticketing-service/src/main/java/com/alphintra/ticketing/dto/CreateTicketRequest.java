@@ -14,6 +14,10 @@ public class CreateTicketRequest {
 
     private String userId;
 
+    private String userEmail;
+
+    private String userName;
+
     @NotBlank(message = "Title is required")
     private String title;
 

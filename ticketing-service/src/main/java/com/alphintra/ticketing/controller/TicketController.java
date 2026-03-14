@@ -37,63 +37,61 @@ public class TicketController {
     @PostMapping
     public ResponseEntity<TicketResponse> createTicket(@Valid @RequestBody CreateTicketRequest request, HttpServletRequest httpRequest) {
         String customerId = httpRequest.getHeader("X-User-Id");
-        if (customerId == null || customerId.isEmpty()) {
+        if ((customerId == null || customerId.isEmpty()) && (request.getUserId() == null || request.getUserId().isEmpty())) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        
-        // Override the userId with the one from header
-        request.setUserId(customerId);
-        
+
+        if (customerId != null && !customerId.isEmpty()) {
+            request.setUserId(customerId);
+        }
+
         TicketResponse response = ticketService.createTicket(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @GetMapping
-    public ResponseEntity<List<TicketResponse>> getAllTickets() {
-        List<TicketResponse> tickets = ticketService.getAllTickets();
-        return ResponseEntity.ok(tickets);
+    public ResponseEntity<Map<String, Object>> getAllTickets(
+            @RequestParam(required = false) TicketStatus status,
+            @RequestParam(required = false) Long assigneeId,
+            @RequestParam(required = false) String customerId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        List<TicketResponse> allTickets = ticketService.getAllTickets(status, assigneeId, customerId);
+        return ResponseEntity.ok(toPagedResponse(allTickets, page, size));
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<TicketResponse> getTicketById(@PathVariable Long id) {
-        TicketResponse ticket = ticketService.getTicketById(id);
+    public ResponseEntity<TicketResponse> getTicketById(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "false") boolean agentView) {
+        TicketResponse ticket = ticketService.getTicketById(id, agentView);
         return ResponseEntity.ok(ticket);
     }
 
     @GetMapping("/my-tickets")
     public ResponseEntity<Map<String, Object>> getMyTickets(
             HttpServletRequest request,
+            @RequestParam(required = false) String userId,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         String customerId = request.getHeader("X-User-Id");
         if (customerId == null || customerId.isEmpty()) {
+            customerId = userId;
+        }
+        if (customerId == null || customerId.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
-        
+
         List<TicketResponse> allTickets = ticketService.getTicketsByCustomer(customerId);
-        
-        // Apply pagination
-        int totalElements = allTickets.size();
-        int fromIndex = page * size;
-        int toIndex = Math.min(fromIndex + size, totalElements);
-        
-        List<TicketResponse> paginatedTickets = allTickets.subList(fromIndex, toIndex);
-        
-        Map<String, Object> response = new HashMap<>();
-        response.put("content", paginatedTickets);
-        response.put("totalElements", totalElements);
-        response.put("totalPages", (int) Math.ceil((double) totalElements / size));
-        response.put("number", page);
-        response.put("size", size);
-        response.put("first", page == 0);
-        response.put("last", toIndex >= totalElements);
-        
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(toPagedResponse(allTickets, page, size));
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<TicketStats> getTicketStats(HttpServletRequest request) {
+    public ResponseEntity<TicketStats> getTicketStats(HttpServletRequest request, @RequestParam(required = false) String userId) {
         String customerId = request.getHeader("X-User-Id");
+        if (customerId == null || customerId.isEmpty()) {
+            customerId = userId;
+        }
         if (customerId == null || customerId.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }
@@ -114,8 +112,11 @@ public class TicketController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<TicketResponse> updateTicket(@PathVariable Long id, @Valid @RequestBody UpdateTicketRequest request) {
-        TicketResponse response = ticketService.updateTicket(id, request);
+    public ResponseEntity<TicketResponse> updateTicket(
+            @PathVariable Long id,
+            @Valid @RequestBody UpdateTicketRequest request,
+            @RequestParam(defaultValue = "false") boolean agentView) {
+        TicketResponse response = ticketService.updateTicket(id, request, agentView);
         return ResponseEntity.ok(response);
     }
 
@@ -141,5 +142,23 @@ public class TicketController {
     public ResponseEntity<TicketResponse> reopenTicket(@PathVariable Long id) {
         TicketResponse response = ticketService.reopenTicket(id);
         return ResponseEntity.ok(response);
+    }
+
+    private Map<String, Object> toPagedResponse(List<TicketResponse> tickets, int page, int size) {
+        int totalElements = tickets.size();
+        int fromIndex = Math.min(page * size, totalElements);
+        int toIndex = Math.min(fromIndex + size, totalElements);
+        List<TicketResponse> paginatedTickets = tickets.subList(fromIndex, toIndex);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("content", paginatedTickets);
+        response.put("totalElements", totalElements);
+        response.put("totalPages", totalElements == 0 ? 0 : (int) Math.ceil((double) totalElements / size));
+        response.put("number", page);
+        response.put("size", size);
+        response.put("first", page == 0);
+        response.put("last", toIndex >= totalElements);
+        response.put("numberOfElements", paginatedTickets.size());
+        return response;
     }
 }

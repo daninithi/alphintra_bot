@@ -1,93 +1,123 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAuth } from '@/components/auth/auth-provider';
 import axios from 'axios';
-import { sendSupportCredentials } from '@/lib/email/supportEmail';
+import { X, Eye, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
 
-interface SupportMember {
+interface Ticket {
   id: number;
-  username: string;
-  email: string;
-  active: boolean;
+  title: string;
+  description: string;
+  status: 'NEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'REOPENED';
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  category: string;
+  customerId: string;
+  customerEmail: string;
+  customerName: string;
+  assigneeId: number | null;
+  assignedAgentName: string | null;
+  assignedAgentEmail: string | null;
+  errorLogs: string | null;
+  tags: string[];
+  attachments: string[];
   createdAt: string;
-  assignedCategory: string | null;
-  specializationLevel: 'JUNIOR' | 'MID' | 'SENIOR';
-  maxTickets: number;
-  currentTicketCount: number;
+  updatedAt: string;
 }
 
-interface Credentials {
-  username: string;
-  password: string;
-  email: string;
+interface UpdateTicketData {
+  status?: string;
+  priority?: string;
+  responseNote?: string;
 }
 
-const TICKET_CATEGORIES = [
-  'TECHNICAL',
-  'BUG_REPORT',
-  'STRATEGY_DEVELOPMENT',
-  'LIVE_TRADING',
-  'BROKER_INTEGRATION',
-  'ACCOUNT_BILLING',
-  'MARKETPLACE',
-  'SECURITY',
-  'DATA_PRIVACY',
-  'FEATURE_REQUEST',
-  'GENERAL_INQUIRY'
-];
-
-const formatCategory = (category: string): string => {
-  return category.split('_').map(word => 
-    word.charAt(0) + word.slice(1).toLowerCase()
-  ).join(' ');
+const STATUS_COLORS = {
+  NEW: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30',
+  ASSIGNED: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/30',
+  IN_PROGRESS: 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/30',
+  RESOLVED: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30',
+  CLOSED: 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/30',
+  REOPENED: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/30'
 };
 
-export default function SupportPage() {
-  const [members, setMembers] = useState<SupportMember[]>([]);
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
-  const [showManageModal, setShowManageModal] = useState(false);
-  const [selectedMember, setSelectedMember] = useState<SupportMember | null>(null);
-  const [credentials, setCredentials] = useState<Credentials | null>(null);
-  const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [specializationLevel, setSpecializationLevel] = useState<'JUNIOR' | 'MID' | 'SENIOR'>('MID');
-  const [maxTickets, setMaxTickets] = useState<number>(10);
+const PRIORITY_COLORS = {
+  LOW: 'bg-gray-50 text-gray-600 dark:bg-gray-500/10 dark:text-gray-400',
+  MEDIUM: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
+  HIGH: 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400',
+  URGENT: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+};
+
+export default function SupportTicketingPage() {
+  const { user } = useAuth();
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [updating, setUpdating] = useState(false);
+  const [updateData, setUpdateData] = useState<UpdateTicketData>({});
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>('');
 
   useEffect(() => {
-    fetchMembers();
-  }, []);
+    fetchTickets();
+  }, [user]);
 
-  const fetchMembers = async () => {
+  const fetchTickets = async () => {
     try {
       const token = localStorage.getItem('alphintra_auth_token');
-      const response = await axios.get('http://localhost:8790/auth/admin/support/all', {
+      if (!user || !token) return;
+
+      const response = await axios.get(`http://localhost:8790/ticketing/tickets`, {
+        params: {
+          assigneeId: user.id
+        },
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
-      if (response.data.success) {
-        setMembers(response.data.members);
+
+      if (response.data && response.data.content) {
+        setTickets(response.data.content);
       }
-    } catch (err: any) {
-      console.error('Failed to fetch members:', err);
+    } catch (error: any) {
+      console.error('Failed to fetch tickets:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleCreateMember = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
+  const openTicketModal = async (ticketId: number) => {
+    try {
+      const token = localStorage.getItem('alphintra_auth_token');
+      const response = await axios.get(`http://localhost:8790/ticketing/tickets/${ticketId}`, {
+        params: { agentView: true },
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      setSelectedTicket(response.data);
+      setUpdateData({
+        status: response.data.status,
+        priority: response.data.priority
+      });
+      setShowModal(true);
+    } catch (error) {
+      console.error('Failed to fetch ticket details:', error);
+    }
+  };
+
+  const handleUpdateTicket = async () => {
+    if (!selectedTicket) return;
+    
+    setUpdating(true);
+    setMessage(null);
 
     try {
       const token = localStorage.getItem('alphintra_auth_token');
-      const response = await axios.post(
-        'http://localhost:8790/auth/admin/support/create',
-        { email },
+      await axios.put(
+        `http://localhost:8790/ticketing/tickets/${selectedTicket.id}`,
+        updateData,
         {
+          params: { agentView: true },
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -95,563 +125,329 @@ export default function SupportPage() {
         }
       );
 
-      if (response.data.success) {
-        const { credentials: creds } = response.data;
-        
-        setCredentials({
-          username: creds.username,
-          password: creds.password,
-          email: email
-        });
-        
-        setShowEmailModal(false);
-        setShowCredentialsModal(true);
-        setEmail('');
-        fetchMembers();
-        
-        // Send credentials via email using EmailJS in background
-        try {
-          await sendSupportCredentials(
-            email,
-            creds.username,
-            creds.password
-          );
-        } catch (emailError) {
-          console.error('Failed to send email:', emailError);
-        }
-      } else {
-        setError(response.data.message || 'Failed to create support member');
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const copyToClipboard = async (text: string, field: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedField(field);
-      setTimeout(() => setCopiedField(null), 2000);
-    } catch (err) {
-      console.error('Failed to copy:', err);
-    }
-  };
-
-  const handleDeleteMember = async (id: number, username: string) => {
-    if (!confirm(`Are you sure you want to delete support member "${username}"? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('alphintra_auth_token');
-      await axios.delete(
-        `http://localhost:8790/auth/admin/support/delete/${id}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-      fetchMembers();
-    } catch (err: any) {
-      console.error('Failed to delete member:', err);
-      alert('Failed to delete member: ' + (err.response?.data?.message || err.message));
-    }
-  };
-
-  const handleToggleActive = async (id: number, currentStatus: boolean) => {
-    try {
-      const token = localStorage.getItem('alphintra_auth_token');
-      const endpoint = currentStatus ? 'deactivate' : 'activate';
+      setMessage({ type: 'success', text: 'Ticket updated successfully' });
+      fetchTickets();
       
-      await axios.put(
-        `http://localhost:8790/auth/admin/support/${endpoint}/${id}`,
-        {},
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-
-      fetchMembers();
-    } catch (err: any) {
-      console.error('Failed to toggle member status:', err);
+      setTimeout(() => {
+        setShowModal(false);
+        setSelectedTicket(null);
+        setUpdateData({});
+      }, 1500);
+    } catch (error: any) {
+      console.error('Failed to update ticket:', error);
+      setMessage({ 
+        type: 'error', 
+        text: 'Failed to update ticket' 
+      });
+    } finally {
+      setUpdating(false);
     }
   };
 
-  const handleOpenManageModal = (member: SupportMember) => {
-    setSelectedMember(member);
-    setSelectedCategory(member.assignedCategory || null);
-    setSpecializationLevel(member.specializationLevel || 'MID');
-    setMaxTickets(member.maxTickets || 10);
-    setShowManageModal(true);
-  };
-
-  const handleSaveSettings = async () => {
-    if (!selectedMember) return;
-
+  const handleResolveTicket = async () => {
+    if (!selectedTicket) return;
+    
+    setUpdating(true);
     try {
       const token = localStorage.getItem('alphintra_auth_token');
-
-      // Update category
-      if (selectedCategory) {
-        await axios.post(
-          `http://localhost:8790/auth/admin/support/assign-category/${selectedMember.id}?category=${selectedCategory}`,
-          {},
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          }
-        );
-      }
-
-      // Update specialization level
       await axios.put(
-        `http://localhost:8790/auth/admin/support/specialization/${selectedMember.id}?level=${specializationLevel}`,
+        `http://localhost:8790/ticketing/tickets/${selectedTicket.id}/resolve`,
         {},
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
+        { headers: { 'Authorization': `Bearer ${token}` } }
       );
 
-      // Update max tickets
-      await axios.put(
-        `http://localhost:8790/auth/admin/support/max-tickets/${selectedMember.id}?maxTickets=${maxTickets}`,
-        {},
-        {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        }
-      );
-
-      setShowManageModal(false);
-      setSelectedMember(null);
-      fetchMembers();
-    } catch (err: any) {
-      console.error('Failed to update settings:', err);
-      alert('Failed to update settings: ' + (err.response?.data?.message || err.message));
+      setMessage({ type: 'success', text: 'Ticket resolved successfully' });
+      fetchTickets();
+      setTimeout(() => {
+        setShowModal(false);
+        setSelectedTicket(null);
+      }, 1500);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to resolve ticket' });
+    } finally {
+      setUpdating(false);
     }
   };
 
-  const toggleCategory = (category: string) => {
-    setSelectedCategory(prev => prev === category ? null : category);
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString();
   };
+
+  const filteredTickets = filterStatus 
+    ? tickets.filter(t => t.status === filterStatus)
+    : tickets;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-foreground text-xl">Loading tickets...</div>
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-full">
-      <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
-        <h1 className="text-3xl font-bold text-foreground">Support Team Management</h1>
-        <button
-          onClick={() => setShowEmailModal(true)}
-          className="bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-6 rounded-lg transition-colors flex items-center gap-2 shrink-0"
+    <div className="p-6 space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">My Assigned Tickets</h1>
+          <p className="text-muted-foreground">View and manage your assigned support tickets</p>
+        </div>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          className="rounded-md border border-border bg-background px-4 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-          </svg>
-          Add Support Member
-        </button>
+          <option value="">All Status</option>
+          <option value="NEW">New</option>
+          <option value="ASSIGNED">Assigned</option>
+          <option value="IN_PROGRESS">In Progress</option>
+          <option value="RESOLVED">Resolved</option>
+          <option value="CLOSED">Closed</option>
+          <option value="REOPENED">Reopened</option>
+        </select>
       </div>
 
-      {/* Email Input Modal */}
-      {showEmailModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md shadow-xl">
-            <h2 className="text-xl font-semibold mb-4 text-foreground">Create New Support Member</h2>
-            <form onSubmit={handleCreateMember} className="space-y-4">
-              <div>
-                <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  id="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-foreground"
-                  placeholder="support@example.com"
-                  required
-                  disabled={loading}
-                  autoFocus
-                />
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-muted-foreground text-sm">Total</p>
+              <p className="text-2xl font-bold text-foreground">{tickets.length}</p>
+            </div>
+            <AlertCircle className="w-8 h-8 text-blue-500 dark:text-blue-400" />
+          </div>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-muted-foreground text-sm">In Progress</p>
+              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
+                {tickets.filter(t => t.status === 'IN_PROGRESS').length}
+              </p>
+            </div>
+            <Clock className="w-8 h-8 text-yellow-500 dark:text-yellow-400" />
+          </div>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-muted-foreground text-sm">Resolved</p>
+              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                {tickets.filter(t => t.status === 'RESOLVED').length}
+              </p>
+            </div>
+            <CheckCircle className="w-8 h-8 text-green-500 dark:text-green-400" />
+          </div>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-muted-foreground text-sm">New</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                {tickets.filter(t => t.status === 'NEW' || t.status === 'ASSIGNED').length}
+              </p>
+            </div>
+            <XCircle className="w-8 h-8 text-blue-500 dark:text-blue-400" />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40">
+              <tr className="border-b border-border">
+                <th className="px-4 py-3 text-left font-semibold text-foreground">ID</th>
+                <th className="px-4 py-3 text-left font-semibold text-foreground">Title</th>
+                <th className="px-4 py-3 text-left font-semibold text-foreground">Customer</th>
+                <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
+                <th className="px-4 py-3 text-left font-semibold text-foreground">Priority</th>
+                <th className="px-4 py-3 text-left font-semibold text-foreground">Created</th>
+                <th className="px-4 py-3 text-left font-semibold text-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTickets.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
+                    No tickets found
+                  </td>
+                </tr>
+              ) : (
+                filteredTickets.map((ticket) => (
+                  <tr 
+                    key={ticket.id} 
+                    className="border-t border-border hover:bg-muted/20 transition-colors"
+                  >
+                    <td className="px-4 py-3 text-foreground">{ticket.id}</td>
+                    <td className="px-4 py-3">
+                      <div className="max-w-xs">
+                        <p className="text-sm font-medium text-foreground truncate">{ticket.title}</p>
+                        <p className="text-xs text-muted-foreground truncate mt-1">{ticket.description}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div>
+                        <p className="text-sm text-foreground">{ticket.customerName || 'N/A'}</p>
+                        <p className="text-xs text-muted-foreground">{ticket.customerEmail}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-3 py-1 text-xs font-medium rounded-full border ${STATUS_COLORS[ticket.status]}`}>
+                        {ticket.status.replace('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`px-3 py-1 text-xs font-medium rounded-full ${PRIORITY_COLORS[ticket.priority]}`}>
+                        {ticket.priority}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {new Date(ticket.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => openTicketModal(ticket.id)}
+                        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 hover:bg-muted/40 transition-colors text-foreground"
+                      >
+                        <Eye className="w-4 h-4" />
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {showModal && selectedTicket && (
+        <div className="fixed inset-0 -top-10 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-card rounded-xl border border-border max-w-4xl w-full max-h-[90vh] shadow-2xl overflow-hidden">
+            <div className="flex flex-col h-full max-h-[90vh]">
+              {/* Header */}
+              <div className="flex-shrink-0 bg-card border-b border-border px-6 py-5 flex justify-between items-start">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-2xl font-bold text-foreground">Ticket {selectedTicket.id}</h2>
+                  <p className="text-muted-foreground text-sm mt-1">{selectedTicket.title}</p>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="p-2 hover:bg-muted/40 rounded-lg transition-colors ml-4 flex-shrink-0"
+                >
+                  <X className="w-6 h-6 text-foreground" />
+                </button>
               </div>
 
-              {error && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 px-4 py-3 rounded-lg text-sm">
-                  {error}
+              {/* Content */}
+              <div className="p-6 space-y-6 overflow-y-auto flex-1 bg-card">
+              {message && (
+                <div
+                  className={`p-4 rounded-lg text-sm font-medium border ${
+                    message.type === 'success'
+                      ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-200 dark:border-green-400/50'
+                      : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/20 dark:text-red-200 dark:border-red-400/50'
+                  }`}
+                >
+                  {message.text}
                 </div>
               )}
 
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-muted/40 rounded-lg p-4 border border-border">
+                  <p className="text-muted-foreground text-sm mb-1">Customer</p>
+                  <p className="text-foreground font-medium">{selectedTicket.customerName || 'N/A'}</p>
+                  <p className="text-muted-foreground text-sm">{selectedTicket.customerEmail}</p>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-4 border border-border">
+                  <p className="text-muted-foreground text-sm mb-1">Category</p>
+                  <p className="text-foreground font-medium">{selectedTicket.category?.replace('_', ' ')}</p>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-4 border border-border">
+                  <p className="text-muted-foreground text-sm mb-1">Created</p>
+                  <p className="text-foreground font-medium">{formatDate(selectedTicket.createdAt)}</p>
+                </div>
+                <div className="bg-muted/40 rounded-lg p-4 border border-border">
+                  <p className="text-muted-foreground text-sm mb-1">Last Updated</p>
+                  <p className="text-foreground font-medium">{formatDate(selectedTicket.updatedAt)}</p>
+                </div>
+              </div>
+
+              <div className="bg-muted/40 rounded-lg p-4 border border-border">
+                <p className="text-muted-foreground text-sm mb-2">Description</p>
+                <p className="text-foreground whitespace-pre-wrap">{selectedTicket.description}</p>
+              </div>
+
+              {selectedTicket.errorLogs && (
+                <div className="bg-muted/40 rounded-lg p-4 border border-border">
+                  <p className="text-muted-foreground text-sm mb-2">Error Logs</p>
+                  <pre className="text-red-600 dark:text-red-400/90 text-xs bg-red-50 dark:bg-red-500/10 p-3 rounded overflow-x-auto border border-red-200 dark:border-red-500/30">
+                    {selectedTicket.errorLogs}
+                  </pre>
+                </div>
+              )}
+
+              <div className="bg-muted/40 rounded-lg p-4 border border-border space-y-4">
+                <h3 className="text-foreground font-semibold text-lg">Update Ticket</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-muted-foreground text-sm mb-2">Status</label>
+                    <select
+                      value={updateData.status || selectedTicket.status}
+                      onChange={(e) => setUpdateData({ ...updateData, status: e.target.value })}
+                      className="w-full bg-background text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="NEW">New</option>
+                      <option value="ASSIGNED">Assigned</option>
+                      <option value="IN_PROGRESS">In Progress</option>
+                      <option value="RESOLVED">Resolved</option>
+                      <option value="CLOSED">Closed</option>
+                      <option value="REOPENED">Reopened</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-muted-foreground text-sm mb-2">Priority</label>
+                    <select
+                      value={updateData.priority || selectedTicket.priority}
+                      onChange={(e) => setUpdateData({ ...updateData, priority: e.target.value })}
+                      className="w-full bg-background text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="LOW">Low</option>
+                      <option value="MEDIUM">Medium</option>
+                      <option value="HIGH">High</option>
+                      <option value="URGENT">Urgent</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
               <div className="flex gap-3">
                 <button
-                  type="button"
-                  onClick={() => {
-                    setShowEmailModal(false);
-                    setEmail('');
-                    setError('');
-                  }}
-                  disabled={loading}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-foreground font-medium py-2 px-4 rounded-lg transition-colors"
+                  onClick={handleUpdateTicket}
+                  disabled={updating}
+                  className="flex-1 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-semibold py-3 px-6 rounded-lg transition-all disabled:cursor-not-allowed"
                 >
-                  Cancel
+                  {updating ? 'Updating...' : 'Update Ticket'}
                 </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="flex-1 bg-yellow-500 hover:bg-yellow-600 disabled:bg-yellow-400 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-                >
-                  {loading ? 'Creating...' : 'Create'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Credentials Display Modal */}
-      {showCredentialsModal && credentials && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-md shadow-xl">
-            <div className="flex items-center gap-2 mb-4">
-              <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <h2 className="text-xl font-semibold text-foreground">Support Member Created!</h2>
-            </div>
-            
-            <p className="text-sm text-muted-foreground mb-4">
-              Credentials have been sent to <span className="font-medium text-foreground">{credentials.email}</span>
-            </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">
-                  Username
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={credentials.username}
-                    readOnly
-                    className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-mono"
-                  />
+                
+                {selectedTicket.status !== 'RESOLVED' && selectedTicket.status !== 'CLOSED' && (
                   <button
-                    onClick={() => copyToClipboard(credentials.username, 'username')}
-                    className="px-3 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-foreground rounded-lg transition-colors"
+                    onClick={handleResolveTicket}
+                    disabled={updating}
+                    className="flex-1 bg-green-600 hover:bg-green-700 dark:bg-green-500/20 dark:hover:bg-green-500/30 dark:text-green-400 dark:border-2 dark:border-green-500/40 text-white font-semibold py-3 px-6 rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {copiedField === 'username' ? (
-                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                    )}
+                    {updating ? 'Resolving...' : 'Mark as Resolved'}
                   </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-muted-foreground mb-1">
-                  Password
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={credentials.password}
-                    readOnly
-                    className="flex-1 px-3 py-2 bg-background border border-border rounded-lg text-foreground text-sm font-mono"
-                  />
-                  <button
-                    onClick={() => copyToClipboard(credentials.password, 'password')}
-                    className="px-3 py-2 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-foreground rounded-lg transition-colors"
-                  >
-                    {copiedField === 'password' ? (
-                      <svg className="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
+                )}
               </div>
             </div>
-
-            <div className="mt-6">
-              <button
-                onClick={() => {
-                  setShowCredentialsModal(false);
-                  setCredentials(null);
-                }}
-                className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-              >
-                Done
-              </button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Manage Settings Modal */}
-      {showManageModal && selectedMember && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-lg p-6 w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold text-foreground mb-4">
-              Manage {selectedMember.username}
-            </h2>
-
-            <div className="space-y-6">
-              {/* Specialization Level */}
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Specialization Level
-                </label>
-                <select
-                  value={specializationLevel}
-                  onChange={(e) => setSpecializationLevel(e.target.value as 'JUNIOR' | 'MID' | 'SENIOR')}
-                  className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-foreground"
-                >
-                  <option value="JUNIOR">Junior</option>
-                  <option value="MID">Mid-Level</option>
-                  <option value="SENIOR">Senior</option>
-                </select>
-              </div>
-
-              {/* Max Tickets */}
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Maximum Concurrent Tickets
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="50"
-                  value={maxTickets}
-                  onChange={(e) => setMaxTickets(parseInt(e.target.value) || 10)}
-                  className="w-full px-4 py-2 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-foreground"
-                />
-              </div>
-
-              {/* Assigned Category */}
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  Assigned Category (Select One)
-                </label>
-                <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto p-3 bg-background border border-border rounded-lg">
-                  {TICKET_CATEGORIES.map((category) => (
-                    <label
-                      key={category}
-                      className={`flex items-center gap-2 p-2 rounded-md cursor-pointer transition-colors ${
-                        selectedCategory === category
-                          ? 'bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700'
-                          : 'bg-card hover:bg-muted/30 border border-border'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="category"
-                        checked={selectedCategory === category}
-                        onChange={() => toggleCategory(category)}
-                        className="w-4 h-4 text-yellow-600 bg-background border-gray-300 focus:ring-yellow-500"
-                      />
-                      <span className="text-sm text-foreground">
-                        {formatCategory(category)}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowManageModal(false);
-                  setSelectedMember(null);
-                }}
-                className="flex-1 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-foreground font-medium py-2 px-4 rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveSettings}
-                className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Support Members List */}
-      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden max-w-full">
-        <div className="px-6 py-4 border-b border-border">
-          <h2 className="text-xl font-semibold text-foreground">Support Team Members</h2>
-        </div>
-
-        {members.length === 0 ? (
-          <div className="p-8 text-center text-muted-foreground">
-            No support members yet. Create one to get started.
-          </div>
-        ) : (
-          <div className="overflow-x-auto overflow-y-auto max-h-[500px]">
-            <table className="w-full min-w-[800px]">
-              <thead className="bg-muted/50 sticky top-0 z-10">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground uppercase tracking-wider bg-muted/50">
-                    Username
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground uppercase tracking-wider bg-muted/50">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground uppercase tracking-wider bg-muted/50">
-                    Level
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground uppercase tracking-wider bg-muted/50">
-                    Category
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground uppercase tracking-wider bg-muted/50">
-                    Workload
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground uppercase tracking-wider bg-muted/50">
-                    Status
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground uppercase tracking-wider bg-muted/50">
-                    Created At
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-foreground uppercase tracking-wider bg-muted/50">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {members.map((member) => (
-                  <tr key={member.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-foreground">
-                      {member.username}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                      {member.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-3 py-1 inline-flex items-center justify-center text-xs leading-5 font-semibold rounded-full min-w-[70px] ${
-                          member.specializationLevel === 'SENIOR'
-                            ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400'
-                            : member.specializationLevel === 'MID'
-                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
-                            : 'bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400'
-                        }`}
-                      >
-                        {member.specializationLevel || 'MID'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-foreground">
-                      {member.assignedCategory ? (
-                        <span className="px-2 py-1 bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 text-xs rounded-md">
-                          {formatCategory(member.assignedCategory)}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">No category</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 bg-gray-200 dark:bg-gray-700 rounded-full h-2 max-w-[100px]">
-                          <div
-                            className={`h-2 rounded-full ${
-                              (member.currentTicketCount || 0) >= (member.maxTickets || 10)
-                                ? 'bg-red-500'
-                                : (member.currentTicketCount || 0) >= (member.maxTickets || 10) * 0.7
-                                ? 'bg-yellow-500'
-                                : 'bg-green-500'
-                            }`}
-                            style={{
-                              width: `${Math.min(100, ((member.currentTicketCount || 0) / (member.maxTickets || 10)) * 100)}%`
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs font-medium min-w-[45px]">
-                          {member.currentTicketCount || 0}/{member.maxTickets || 10}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-3 py-1 inline-flex items-center justify-center gap-1 text-xs leading-5 font-semibold rounded-full min-w-[90px] ${
-                          member.active
-                            ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                            : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
-                        }`}
-                      >
-                        {member.active ? (
-                          <>
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                            </svg>
-                            Active
-                          </>
-                        ) : (
-                          <>
-                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
-                              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                            </svg>
-                            Inactive
-                          </>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                      {new Date(member.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-2 items-center">
-                        <button
-                          onClick={() => handleOpenManageModal(member)}
-                          className="px-3 py-1 rounded-md font-medium transition-colors min-w-[80px] bg-yellow-100 text-yellow-700 hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400 dark:hover:bg-yellow-900/50"
-                          title="Manage settings"
-                        >
-                          Manage
-                        </button>
-                        <button
-                          onClick={() => handleToggleActive(member.id, member.active)}
-                          className={`px-3 py-1 rounded-md font-medium transition-colors min-w-[100px] ${
-                            member.active
-                              ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50'
-                              : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/50'
-                          }`}
-                        >
-                          {member.active ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button
-                          onClick={() => handleDeleteMember(member.id, member.username)}
-                          className="p-2 rounded-md transition-colors bg-red-600 text-white hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800"
-                          title="Delete member"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

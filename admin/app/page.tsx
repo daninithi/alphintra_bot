@@ -23,9 +23,6 @@ interface FormData {
   password: string;
 }
 
-const ADMIN_EMAIL = 'alphintraadmin@gmail.com';
-const ADMIN_PASSWORD = 'Admin123';
-
 const AdminAuthPage: React.FC = () => {
   const router = useRouter();
   const { login: authLogin, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -87,17 +84,6 @@ const AdminAuthPage: React.FC = () => {
     try {
       if (isLogin) {
         console.log('[Admin Login] Starting login process for:', formData.email);
-
-        if (
-          formData.email.trim().toLowerCase() !== ADMIN_EMAIL ||
-          formData.password !== ADMIN_PASSWORD
-        ) {
-          setMessage({
-            type: 'error',
-            text: 'Access denied. Please login with the configured admin account.',
-          });
-          return;
-        }
 
         const response = await authServiceApiClient.login({
           email: formData.email,
@@ -279,7 +265,7 @@ const AdminAuthPage: React.FC = () => {
               name="email"
               value={formData.email}
               onChange={handleInputChange}
-              placeholder={isLogin ? 'admin@alphintra.com' : 'your.email@example.com'}
+              placeholder={isLogin ? 'Enter your email' : 'your.email@example.com'}
               error={errors.email}
               Icon={Mail}
             />

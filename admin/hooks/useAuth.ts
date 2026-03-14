@@ -51,7 +51,7 @@ export const useAuthHook = (): AuthContextType => {
             email: storedUser.email,
             username: storedUser.email.split('@')[0],
             roles: [storedUser.role || 'ADMIN'],
-            isActive: storedUser.isVerified,
+            isActive: storedUser.isVerified ?? true,
             lastLogin: storedUser.updatedAt
           };
           setUser(mappedUser);
@@ -124,7 +124,7 @@ export const useAuthHook = (): AuthContextType => {
         email: storedUser.email,
         username: storedUser.email.split('@')[0],
         roles: [storedUser.role || 'ADMIN'],
-        isActive: storedUser.isVerified,
+        isActive: storedUser.isVerified ?? true,
         lastLogin: storedUser.updatedAt
       };
       setUser(mappedUser);

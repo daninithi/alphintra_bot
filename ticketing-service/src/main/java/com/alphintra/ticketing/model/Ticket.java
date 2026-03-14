@@ -48,6 +48,10 @@ public class Ticket {
     @Column(nullable = false)
     private String customerId;
 
+    private String customerEmail;
+
+    private String customerName;
+
     @Column(length = 2000)
     private String errorLogs;
 
@@ -55,9 +59,24 @@ public class Ticket {
     private String tags; // JSON array of tags
 
     @Column(columnDefinition = "TEXT")
-    private String attachments; // JSON array of attachment URLs
+    private String attachments; // JSON array of attachment names
 
     private Long assigneeId;
+
+    private String assigneeName;
+
+    private String assigneeEmail;
+
+    @Column(nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private Integer communicationCount = 0;
+
+    @Column(nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private Integer customerUnreadCount = 0;
+
+    @Column(nullable = false, columnDefinition = "INTEGER DEFAULT 0")
+    private Integer agentUnreadCount = 0;
+
+    private LocalDateTime lastCommunicationAt;
 
     @CreationTimestamp
     private LocalDateTime createdAt;
@@ -68,7 +87,16 @@ public class Ticket {
     @PrePersist
     public void prePersist() {
         if (status == null) {
-            status = TicketStatus.OPEN;
+            status = TicketStatus.NEW;
+        }
+        if (communicationCount == null) {
+            communicationCount = 0;
+        }
+        if (customerUnreadCount == null) {
+            customerUnreadCount = 0;
+        }
+        if (agentUnreadCount == null) {
+            agentUnreadCount = 0;
         }
     }
 
