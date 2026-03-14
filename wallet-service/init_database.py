@@ -17,7 +17,7 @@ from models import Base, User, WalletConnection
 # Database URL
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://alphintra:alphintra123@postgres:5432/alphintra"
+    "postgresql://postgres:admin123@localhost:5432/alphintra"
 )
 
 def create_database():

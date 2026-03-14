@@ -116,7 +116,7 @@ public class SupportTeamService {
         
         // Check if another member already has this category with the same specialization level
         Optional<SupportTeam> existingMember = supportTeamRepository.findAll().stream()
-            .filter(m -> !m.getId().equals(id) && 
+            .filter(m -> m.getId() != id && 
                         m.getAssignedCategory() == category && 
                         m.getSpecializationLevel() == member.getSpecializationLevel())
             .findFirst();
@@ -146,7 +146,7 @@ public class SupportTeamService {
         // Check if changing level would conflict with existing member
         if (member.getAssignedCategory() != null) {
             Optional<SupportTeam> existingMember = supportTeamRepository.findAll().stream()
-                .filter(m -> !m.getId().equals(id) && 
+                .filter(m -> m.getId() != id && 
                             m.getAssignedCategory() == member.getAssignedCategory() && 
                             m.getSpecializationLevel() == level)
                 .findFirst();
@@ -261,43 +261,5 @@ public class SupportTeamService {
             characters[j] = temp;
         }
         return new String(characters);
-    }
-
-    // Profile Management Methods
-    @Transactional
-    public void updateUsername(Long id, String newUsername) {
-        SupportTeam member = supportTeamRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Support member not found"));
-        
-        // Check if username is already taken by another member
-        if (supportTeamRepository.existsByUsername(newUsername)) {
-            Optional<SupportTeam> existingMember = supportTeamRepository.findByUsername(newUsername);
-            if (existingMember.isPresent() && !existingMember.get().getId().equals(id)) {
-                throw new RuntimeException("Username already taken");
-            }
-        }
-        
-        member.setUsername(newUsername);
-        supportTeamRepository.save(member);
-    }
-
-    @Transactional
-    public void changePassword(Long id, String currentPassword, String newPassword) {
-        SupportTeam member = supportTeamRepository.findById(id)
-            .orElseThrow(() -> new RuntimeException("Support member not found"));
-        
-        // Verify current password
-        if (!passwordEncoder.matches(currentPassword, member.getPassword())) {
-            throw new RuntimeException("Current password is incorrect");
-        }
-        
-        // Validate new password
-        if (newPassword == null || newPassword.length() < 8) {
-            throw new RuntimeException("New password must be at least 8 characters");
-        }
-        
-        // Update password
-        member.setPassword(passwordEncoder.encode(newPassword));
-        supportTeamRepository.save(member);
     }
 }

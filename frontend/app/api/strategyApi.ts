@@ -1,76 +1,112 @@
-import { Strategy } from '@/components/marketplace/types'; // Import your existing Strategy type
-import { buildGatewayUrl } from '@/lib/config/gateway';
+import { Strategy } from '@/components/marketplace/types';
 
-// Call the marketplace API via the gateway
-const STRATEGIES_API_URL = buildGatewayUrl('/strategies');
+const MARKETPLACE_API_BASE =
+  process.env.NEXT_PUBLIC_MARKETPLACE_API_URL ?? 'http://localhost:8097';
 
-/**
- * Fetches the list of trading strategies from the FastAPI REST service.
- * NOTE: The data structure returned by the REST service is flat and does not match the
- * complex structure expected by the old GraphQL client (e.g., performance, assetType).
- * We will perform basic mapping here to avoid crashing the frontend.
- * @returns A promise that resolves to an array of Strategy objects.
- */
-export async function fetchStrategies(): Promise<Strategy[]> {
-    try {
-        // Use a simple GET request for the REST endpoint
-        // It now uses the proxied URL, which Next.js forwards to the Docker container
-        const response = await fetch(STRATEGIES_API_URL, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json',
-            },
-        });
+const STRATEGIES_API_URL = `${MARKETPLACE_API_BASE}/marketplace/strategies`;
 
-        if (!response.ok) {
-            // Updated error message for REST
-            throw new Error(`REST fetch failed with status: ${response.status}`);
-        }
+function mapStrategy(strategy: any): Strategy {
+  const priceNumber = Number(strategy.price ?? 0);
 
-        const restStrategies = await response.json();
+  return {
+    id: strategy.strategyId,
+    strategyId: strategy.strategyId,
+    name: strategy.name ?? 'Untitled Strategy',
+    description: strategy.description ?? 'No description provided.',
+    creator: strategy.pythonClass || 'Alphintra',
+    creatorName: strategy.pythonClass || 'Alphintra',
+    category: strategy.type === 'marketplace' ? 'Marketplace' : 'Default',
+    assetType: 'Crypto',
 
-        const mappedStrategies: Strategy[] = restStrategies.map((strategy: any) => {
-            const priceCents = Number(strategy.price_cents ?? 0);
-            return {
-                id: Number(strategy.id),
-                name: strategy.name ?? 'Untitled Strategy',
-                description: strategy.description ?? 'No description provided.',
-                category: 'general',
-                assetType: (strategy.asset_type ?? 'Crypto') as string,
-                tradingPairs: strategy.trading_pairs ?? [],
-                price: priceCents === 0 ? 'free' : priceCents / 100,
-                riskLevel: ((strategy.risk_level ?? 'medium') as string).toLowerCase() as 'low' | 'medium' | 'high',
-                verificationStatus: 'APPROVED',
-                performance: {
-                    totalReturn: strategy.total_return ?? 0.25,
-                    annualizedReturn: strategy.annualized_return ?? 0.18,
-                    maxDrawdown: strategy.max_drawdown ?? 0.1,
-                    sharpeRatio: strategy.sharpe_ratio ?? 1.5,
-                    winRate: strategy.win_rate ?? 55,
-                },
-                rating: strategy.rating ?? 4.6,
-                reviewCount: strategy.review_count ?? 42,
-                subscriberCount: strategy.subscriber_count ?? 0,
-                lastUpdated: strategy.updated_at ?? new Date().toISOString(),
-                isVerified: strategy.is_verified ?? true,
-                thumbnail: strategy.thumbnail ?? 'apex-5min',
-                gradientColors: strategy.gradient_colors ?? ['#1a2a6c', '#b21f1f', '#fdbb2d'],
-                creatorId: (strategy.creator_id ?? 'team').toString(),
-                creatorName: strategy.creator_name ?? 'Alphintra Team',
-            };
-        });
+    price: priceNumber === 0 ? 'free' : String(priceNumber),
 
-        return mappedStrategies;
+    riskLevel:
+      priceNumber > 50 ? 'high' : priceNumber > 0 ? 'medium' : 'low',
 
-    } catch (error) {
-        console.error('API Error in fetchStrategies (REST):', error);
-        // Ensure the error doesn't stop the application
-        return []; 
-    }
+    rating: 4.5,
+    reviewCount: 0,
+    subscriberCount: strategy.totalPurchases ?? 0,
+
+    performance: {
+      totalReturn: 12,
+      winRate: 65,
+    },
+
+    isVerified: true,
+
+    // neutral UI values instead of colorful cards
+    thumbnail: 'default',
+    gradientColors: ['#374151', '#1f2937'],
+
+    type: strategy.type ?? 'default',
+  };
 }
 
-export async function fetchStrategyById(id: string | number): Promise<Strategy | null> {
-    const strategies = await fetchStrategies();
-    const numericId = Number(id);
-    return strategies.find((strategy) => strategy.id === numericId) ?? null;
+export async function fetchStrategies(): Promise<Strategy[]> {
+  try {
+    const response = await fetch(STRATEGIES_API_URL, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Fetch failed with status: ${response.status}`);
+    }
+
+    const restStrategies = await response.json();
+
+    return Array.isArray(restStrategies)
+      ? restStrategies.map(mapStrategy)
+      : [];
+  } catch (error) {
+    console.error('API Error in fetchStrategies:', error);
+    return [];
+  }
+}
+
+export async function fetchBoughtStrategies(userId: number): Promise<Strategy[]> {
+  try {
+    const response = await fetch(
+      `${MARKETPLACE_API_BASE}/marketplace/library/bought/${userId}`,
+      {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        cache: 'no-store',
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        `Fetch bought strategies failed with status: ${response.status}`
+      );
+    }
+
+    const restStrategies = await response.json();
+
+    return Array.isArray(restStrategies)
+      ? restStrategies.map(mapStrategy)
+      : [];
+  } catch (error) {
+    console.error('API Error in fetchBoughtStrategies:', error);
+    return [];
+  }
+}
+
+export async function fetchStrategyById(
+  id: string | number
+): Promise<Strategy | null> {
+  const strategies = await fetchStrategies();
+
+  return (
+    strategies.find(
+      (strategy) =>
+        String(strategy.id) === String(id) ||
+        String(strategy.strategyId) === String(id)
+    ) ?? null
+  );
 }

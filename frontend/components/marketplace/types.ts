@@ -1,27 +1,19 @@
 export interface Strategy {
-  id: number;
+  id: string;
+  strategyId: string;
   name: string;
-  creatorId: string;
-  creatorName: string;
   description: string;
+  creator: string;
   category: string;
   assetType: string;
-  tradingPairs: string[];
-  price: number | 'free';
-  riskLevel: 'low' | 'medium' | 'high';
-  verificationStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  riskLevel: "Low" | "Medium" | "High";
+  rating: number;
+  subscriberCount: number;
+  price: string;
   performance: {
     totalReturn: number;
-    annualizedReturn: number;
-    maxDrawdown: number;
-    sharpeRatio: number;
     winRate: number;
   };
-  rating: number;
-  reviewCount: number;
-  subscriberCount: number;
-  lastUpdated: string;
-  isVerified: boolean;
-  thumbnail: string;
-  gradientColors: string[];
+  verified: boolean;
+  type: string;
 }

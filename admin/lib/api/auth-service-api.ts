@@ -25,9 +25,20 @@ export interface RegisterCredentials {
   password: string;
 }
 
+export interface GoogleLoginCredentials {
+  google_token: string;
+}
+
 export interface AuthResponse {
   user: User;
   token: string;
+}
+
+export interface UpdateProfileRequest {
+  firstName?: string;
+  lastName?: string;
+  phoneNumber?: string;
+  address?: string;
 }
 
 export interface DeleteAccountRequest {
@@ -47,35 +58,6 @@ export interface ChangePasswordRequest {
 
 export interface ChangePasswordResponse {
   message: string;
-}
-
-export type AdminAccountStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED';
-
-export interface LoginHistoryRecord {
-  id: number;
-  userId: number;
-  loginAt: string;
-}
-
-export interface UserStrategyInfo {
-  strategy_id: string;
-  name: string;
-  description: string;
-  type: 'default' | 'marketplace' | 'user_created';
-  access_type: 'default' | 'purchased' | 'created' | null;
-  bot_status: 'running' | 'stopped' | 'error' | null;
-  last_run: string | null;
-  bot_started_at: string | null;
-}
-
-export interface AdminManagedUser {
-  id: number;
-  name: string;
-  email: string;
-  accountStatus: AdminAccountStatus;
-  createdDate: string;
-  lastLogin: string | null;
-  emailVerified: boolean;
 }
 
 export class AuthServiceApiClient {
@@ -211,45 +193,6 @@ export class AuthServiceApiClient {
       data: request
     });
     return response.data;
-  }
-
-  async getManagedUsers(): Promise<AdminManagedUser[]> {
-    const response = await this.api.get<{ users: AdminManagedUser[] }>('/auth/admin/users');
-    return response.data.users || [];
-  }
-
-  async getManagedUserById(userId: number): Promise<AdminManagedUser> {
-    const response = await this.api.get<{ user: AdminManagedUser }>(`/auth/admin/users/${userId}`);
-    return response.data.user;
-  }
-
-  async suspendManagedUser(userId: number): Promise<AdminManagedUser> {
-    const response = await this.api.put<{ user: AdminManagedUser }>(`/auth/admin/users/${userId}/suspend`);
-    return response.data.user;
-  }
-
-  async verifyManagedUser(userId: number): Promise<AdminManagedUser> {
-    const response = await this.api.put<{ user: AdminManagedUser }>(`/auth/admin/users/${userId}/verify`);
-    return response.data.user;
-  }
-
-  async resetManagedUserPassword(userId: number): Promise<string> {
-    const response = await this.api.post<{ temporaryPassword: string }>(`/auth/admin/users/${userId}/reset-password`);
-    return response.data.temporaryPassword;
-  }
-
-  async deleteManagedUser(userId: number): Promise<void> {
-    await this.api.delete(`/auth/admin/users/${userId}`);
-  }
-
-  async getUserStrategies(userId: number): Promise<UserStrategyInfo[]> {
-    const response = await this.api.get<{ status: string; data: UserStrategyInfo[] }>(`/trading/admin/users/${userId}/strategies`);
-    return response.data.data || [];
-  }
-
-  async getUserLoginHistory(userId: number): Promise<LoginHistoryRecord[]> {
-    const response = await this.api.get<{ history: LoginHistoryRecord[] }>(`/auth/admin/users/${userId}/login-history`);
-    return response.data.history || [];
   }
 }
 
