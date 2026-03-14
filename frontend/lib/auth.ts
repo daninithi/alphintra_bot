@@ -1,6 +1,7 @@
 const TOKEN_KEY = 'alphintra_auth_token';
 const LEGACY_TOKEN_KEYS = ['alphintra_jwt_token', 'auth_token'];
 const USER_KEY = 'alphintra_user';
+const LEGACY_USER_KEYS = ['alphintra_jwt_user'];
 
 export interface User {
   id: string;
@@ -44,14 +45,66 @@ export const removeToken = (): void => {
 // User management
 export const getUser = (): User | null => {
   if (typeof window === 'undefined') return null;
-  const userStr = localStorage.getItem(USER_KEY);
-  if (!userStr) return null;
-  
+
+  const storedUser = [USER_KEY, ...LEGACY_USER_KEYS]
+    .map((key) => localStorage.getItem(key))
+    .find(Boolean);
+
+  if (!storedUser) return null;
+
   try {
-    return JSON.parse(userStr);
+    const parsed = JSON.parse(storedUser);
+    const token = getToken();
+
+    let tokenEmail: string | undefined;
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        tokenEmail = payload?.email;
+      } catch {
+        tokenEmail = undefined;
+      }
+    }
+
+    return {
+      id: String(parsed?.id ?? parsed?.userId ?? parsed?.sub ?? ''),
+      email: parsed?.email ?? parsed?.user?.email ?? tokenEmail ?? '',
+      firstName: parsed?.firstName ?? parsed?.first_name ?? parsed?.user?.firstName ?? '',
+      lastName: parsed?.lastName ?? parsed?.last_name ?? parsed?.user?.lastName ?? '',
+      role: parsed?.role ?? parsed?.user?.role ?? 'USER',
+      isVerified: parsed?.isVerified ?? parsed?.emailVerified ?? true,
+      twoFactorEnabled: parsed?.twoFactorEnabled ?? false,
+      createdAt: parsed?.createdAt ?? parsed?.created_at ?? '',
+      updatedAt: parsed?.updatedAt ?? parsed?.updated_at ?? '',
+    };
   } catch {
     return null;
   }
+};
+
+export const getUserEmail = (): string | null => {
+  const user = getUser();
+  if (user?.email) {
+    return user.email;
+  }
+
+  const token = getToken();
+  if (!token) return null;
+
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload?.email ?? null;
+  } catch {
+    return null;
+  }
+};
+
+export const getUserDisplayName = (): string | null => {
+  const user = getUser();
+  if (!user) return null;
+
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ').trim();
+  return fullName || user.email || null;
 };
 
 export const setUser = (user: User): void => {

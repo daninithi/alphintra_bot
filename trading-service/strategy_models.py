@@ -67,8 +67,8 @@ class StrategyDB:
         try:
             self.connection = psycopg2.connect(
                 host=os.getenv("DB_HOST", "localhost"),
-                database=os.getenv("DB_NAME", "alphintra_auth"),
-                user=os.getenv("DB_USER", "alphintra"),
+                database=os.getenv("DB_NAME", "alphintra_auth"),  # Strategies stored in auth database
+                user=os.getenv("DB_USER", "myapp"),
                 password=os.getenv("DB_PASSWORD", "alphintra123"),
                 port=os.getenv("DB_PORT", "5432")
             )
@@ -80,37 +80,84 @@ class StrategyDB:
     def get_user_strategies(self, user_id: int) -> List[Strategy]:
         """
         Get all strategies accessible by a user
-        Includes default, created, and purchased strategies
+        - All default strategies (shown to everyone)
+        - User's own created strategies
+        - Purchased strategies
         """
         try:
             with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
-                    SELECT 
-                        s.strategy_id,
-                        s.name,
-                        s.description,
-                        s.type,
-                        us.access_type,
-                        s.python_class,
-                        s.python_module,
-                        s.strategy_file,
-                        s.parameters,
-                        s.price,
-                        s.author_id,
-                        s.total_purchases,
-                        s.created_at,
-                        s.updated_at
-                    FROM strategies s
-                    INNER JOIN user_strategies us ON s.strategy_id = us.strategy_id
-                    WHERE us.user_id = %s
+                    SELECT * FROM (
+                        -- Get all default strategies (available to everyone)
+                        SELECT 
+                            s.strategy_id,
+                            s.name,
+                            s.description,
+                            s.type,
+                            'default' as access_type,
+                            s.python_class,
+                            s.python_module,
+                            s.strategy_file,
+                            s.parameters,
+                            s.price,
+                            s.author_id,
+                            s.total_purchases,
+                            s.created_at,
+                            s.updated_at
+                        FROM strategies s
+                        WHERE s.type = 'default'
+                        
+                        UNION
+                        
+                        -- Get user's own created strategies
+                        SELECT 
+                            s.strategy_id,
+                            s.name,
+                            s.description,
+                            s.type,
+                            'created' as access_type,
+                            s.python_class,
+                            s.python_module,
+                            s.strategy_file,
+                            s.parameters,
+                            s.price,
+                            s.author_id,
+                            s.total_purchases,
+                            s.created_at,
+                            s.updated_at
+                        FROM strategies s
+                        WHERE s.type = 'user_created' AND s.author_id = %s
+                        
+                        UNION
+                        
+                        -- Get purchased strategies
+                        SELECT 
+                            s.strategy_id,
+                            s.name,
+                            s.description,
+                            s.type,
+                            us.access_type,
+                            s.python_class,
+                            s.python_module,
+                            s.strategy_file,
+                            s.parameters,
+                            s.price,
+                            s.author_id,
+                            s.total_purchases,
+                            s.created_at,
+                            s.updated_at
+                        FROM strategies s
+                        INNER JOIN user_strategies us ON s.strategy_id = us.strategy_id
+                        WHERE us.user_id = %s AND us.access_type = 'purchased'
+                    ) AS combined_strategies
                     ORDER BY 
-                        CASE us.access_type 
+                        CASE access_type 
                             WHEN 'default' THEN 1 
                             WHEN 'created' THEN 2 
                             WHEN 'purchased' THEN 3 
                         END,
-                        s.name
-                """, (user_id,))
+                        name
+                """, (user_id, user_id))
                 
                 rows = cursor.fetchall()
                 strategies = [Strategy(**dict(row)) for row in rows]

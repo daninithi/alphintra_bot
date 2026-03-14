@@ -186,10 +186,6 @@ export default function UserDetailsPage() {
             <p className="text-muted-foreground">Created Date</p>
             <p className="font-medium">{user ? new Date(user.createdDate).toLocaleString() : "-"}</p>
           </div>
-          <div>
-            <p className="text-muted-foreground">Last Login</p>
-            <p className="font-medium">{user?.lastLogin ? new Date(user.lastLogin).toLocaleString() : "Never"}</p>
-          </div>
         </div>
       </section>
 

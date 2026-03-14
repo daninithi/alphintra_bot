@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.alphintra.auth.model.SpecializationLevel;
 import com.alphintra.auth.model.SupportTeam;
 import com.alphintra.auth.model.TicketCategory;
+import com.alphintra.auth.service.AdminService;
 import com.alphintra.auth.service.SupportTeamService;
 
 @RestController
@@ -27,6 +28,28 @@ public class SupportTeamController {
 
     @Autowired
     private SupportTeamService supportTeamService;
+
+    @Autowired
+    private AdminService adminService;
+
+    @GetMapping("/default-admin")
+    public ResponseEntity<?> getDefaultAdmin() {
+        try {
+            var admin = adminService.getPrimaryAdmin();
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "admin", Map.of(
+                            "id", admin.getId(),
+                            "username", admin.getUsername(),
+                            "email", admin.getEmail())));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(
+                    Map.of("success", false, "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(
+                    Map.of("success", false, "message", "Failed to fetch default admin: " + e.getMessage()));
+        }
+    }
 
     @PostMapping("/create")
     public ResponseEntity<?> createSupportMember(@RequestBody Map<String, String> request) {

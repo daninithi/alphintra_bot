@@ -1,177 +1,254 @@
-'use client';
+"use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Search } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import HeaderSection from '@/components/marketplace/HeaderSection';
-import FilterSection from '@/components/marketplace/FilterSection';
-import StatsBar from '@/components/marketplace/StatsBar';
-import StrategyGrid from '@/components/marketplace/StrategyGrid';
-import StrategyModal from '@/components/marketplace/StrategyModal';
-import FilterSidebar from '@/components/marketplace/FilterSidebar';
-import { Strategy } from '@/components/marketplace/types';
-// import mockStrategies from '@/components/marketplace/mockStrategies'; // Deleted (using live data)
-import { useTheme } from '@/components/marketplace/useTheme';
-import { fetchStrategies } from '@/app/api/strategyApi'; // New API import
+import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui";
+import { Loader2 } from "lucide-react";
+import { fetchStrategies } from "@/app/api/strategyApi";
+import StrategyGrid from "@/components/marketplace/StrategyGrid";
+import { Strategy } from "@/components/marketplace/types";
+
+type FilterType = "all" | "default" | "marketplace";
 
 export default function MarketplacePage() {
-  const { theme } = useTheme();
-
-  // 1. STATE FOR LIVE DATA AND LOADING
+  const router = useRouter();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Existing state...
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [sortBy, setSortBy] = useState('popularity');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [showFilters, setShowFilters] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState<FilterType>("all");
+  const [search, setSearch] = useState("");
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
-  const [filters, setFilters] = useState({
-    assetType: 'all',
-    riskLevel: 'all',
-    rating: 0,
-    verificationStatus: 'all',
-  });
 
-  // 2. FETCH DATA ONCE COMPONENT MOUNTS
   useEffect(() => {
-    setIsLoading(true);
-    fetchStrategies()
-      .then(data => setStrategies(data))
-      .catch(error => console.error("Failed to load strategies:", error))
-      .finally(() => setIsLoading(false));
-  }, []); // Empty dependency array means this runs only once on mount
+    async function loadStrategies() {
+      try {
+        setLoading(true);
+        setError("");
+        const data = await fetchStrategies();
+        setStrategies(Array.isArray(data) ? data : []);
+      } catch (err: any) {
+        console.error("Failed to load marketplace strategies:", err);
+        setError(err?.message || "Failed to load marketplace strategies");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadStrategies();
+  }, []);
 
   const filteredStrategies = useMemo(() => {
-    // 3. CHANGE TO USE LIVE DATA: strategies
-    const filtered = strategies
-      .filter((strategy) => {
-        const matchesSearch =
-          strategy.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          strategy.creatorName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          strategy.description.toLowerCase().includes(searchQuery.toLowerCase());
+    let data = [...strategies];
 
-        const matchesCategory = selectedCategory === 'all' || strategy.category.toLowerCase() === selectedCategory.toLowerCase();
-        const matchesAssetType = filters.assetType === 'all' || strategy.assetType.toLowerCase() === filters.assetType.toLowerCase();
-        const matchesRiskLevel = filters.riskLevel === 'all' || strategy.riskLevel === filters.riskLevel;
-        const matchesRating = strategy.rating >= filters.rating;
-        const matchesVerification = filters.verificationStatus === 'all' || strategy.verificationStatus === filters.verificationStatus;
+    if (selectedFilter !== "all") {
+      data = data.filter((strategy) => strategy.type === selectedFilter);
+    }
 
-        return matchesSearch && matchesCategory && matchesAssetType && matchesRiskLevel && matchesRating && matchesVerification;
+    const query = search.trim().toLowerCase();
+
+    if (query) {
+      data = data.filter((strategy) => {
+        const name = strategy.name?.toLowerCase() || "";
+        const description = strategy.description?.toLowerCase() || "";
+        const creator = strategy.creator?.toLowerCase() || "";
+        const category = strategy.category?.toLowerCase() || "";
+        const type = strategy.type?.toLowerCase() || "";
+
+        return (
+          name.includes(query) ||
+          description.includes(query) ||
+          creator.includes(query) ||
+          category.includes(query) ||
+          type.includes(query)
+        );
       });
+    }
 
-    // Create a copy of the array before sorting to avoid mutation
-    const sortedStrategies = [...filtered].sort((a, b) => {
-      switch (sortBy) {
-        case 'roi-desc':
-          return b.performance.totalReturn - a.performance.totalReturn;
-        case 'rating':
-          return b.rating - a.rating;
-        case 'price-asc': {
-          const priceA = a.price === 'free' ? 0 : a.price;
-          const priceB = b.price === 'free' ? 0 : b.price;
-          return priceA - priceB;
-        }
-        case 'price-desc': {
-          const priceA = a.price === 'free' ? 0 : a.price;
-          const priceB = b.price === 'free' ? 0 : b.price;
-          return priceB - priceA;
-        }
-        case 'popularity':
-        default:
-          return b.subscriberCount - a.subscriberCount;
-      }
-    });
+    return data;
+  }, [strategies, selectedFilter, search]);
 
-    return sortedStrategies;
-  }, [searchQuery, selectedCategory, filters, sortBy, strategies]); // Added 'strategies' dependency
+  const totalStrategies = strategies.length;
+  const freeStrategies = strategies.filter((s) => s.price === "free").length;
+  const paidStrategies = strategies.filter((s) => s.price !== "free").length;
 
-  // 4. LOADING CHECK TO RENDER
-  if (isLoading) {
+  const handleBuyNow = (strategy: Strategy) => {
+    const strategyId = strategy.strategyId || strategy.id;
+
+    if (!strategyId) {
+      console.error("Missing strategyId on strategy:", strategy);
+      setError("Unable to open payment page: missing strategy id.");
+      return;
+    }
+
+    router.push(
+      `/marketplace/payment?strategyId=${encodeURIComponent(String(strategyId))}`
+    );
+  };
+
+  if (loading) {
     return (
-      <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'} text-foreground flex justify-center items-center`}>
-        <p className="text-xl text-gray-400">Loading Strategies...</p>
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <Loader2 className="w-8 h-8 animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen ${theme === 'dark' ? 'bg-gray-900' : 'bg-gray-50'} text-foreground`}>
-      <HeaderSection />
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <FilterSection
-          selectedCategory={selectedCategory}
-          setSelectedCategory={setSelectedCategory}
-          filters={filters}
-          setFilters={setFilters}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          sortBy={sortBy}
-          setSortBy={setSortBy}
-          showFilters={showFilters}
-          setShowFilters={setShowFilters}
-          viewMode={viewMode}
-          setViewMode={setViewMode}
-        />
-        <StatsBar filteredStrategies={filteredStrategies} />
-        <div className="flex gap-6">
-          {showFilters && (
-            <div className="w-64 flex-shrink-0">
-              <FilterSidebar filters={filters} onFiltersChange={setFilters} />
-            </div>
-          )}
-          <div className="flex-1">
-            <Tabs defaultValue="browse" className="w-full">
-              <TabsList className="grid w-full grid-cols-3 mb-6">
-                <TabsTrigger value="browse">Browse All</TabsTrigger>
-                <TabsTrigger value="trending">Trending</TabsTrigger>
-                <TabsTrigger value="new">New Releases</TabsTrigger>
-              </TabsList>
-              <TabsContent value="browse" className="space-y-0">
-                {filteredStrategies.length === 0 ? (
-                  <div className={`text-center py-12 ${theme === 'dark' ? 'text-gray-400' : 'text-gray-600'}`}>
-                    <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-lg">No strategies found matching your criteria</p>
-                    <p className="text-sm mt-2">Try adjusting your search or filters</p>
-                  </div>
-                ) : (
-                  <StrategyGrid
-                    filteredStrategies={filteredStrategies}
-                    viewMode={viewMode}
-                    onSelectStrategy={setSelectedStrategy}
-                  />
-                )}
-              </TabsContent>
-              <TabsContent value="trending" className="space-y-0">
-                <StrategyGrid
-                  filteredStrategies={[...filteredStrategies]
-                    .sort((a, b) => b.performance.totalReturn - a.performance.totalReturn)
-                    .slice(0, 6)}
-                  viewMode={viewMode}
-                  onSelectStrategy={setSelectedStrategy}
-                />
-              </TabsContent>
-              <TabsContent value="new" className="space-y-0">
-                <StrategyGrid
-                  filteredStrategies={[...filteredStrategies]
-                    .sort((a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime())
-                    .slice(0, 6)}
-                  viewMode={viewMode}
-                  onSelectStrategy={setSelectedStrategy}
-                />
-              </TabsContent>
-            </Tabs>
+    <div className="flex flex-col min-h-screen bg-background">
+      <main className="flex-1 p-6 pt-0 space-y-6">
+        <div className="pt-6 space-y-2">
+          <h1 className="text-3xl font-bold tracking-tight">Marketplace</h1>
+          <p className="text-muted-foreground max-w-2xl">
+            Browse built-in and premium trading strategies. Compare options,
+            explore details, and choose strategies that match your style.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+            <p className="text-sm text-muted-foreground">Total Strategies</p>
+            <p className="mt-2 text-3xl font-semibold">{totalStrategies}</p>
+          </div>
+
+          <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+            <p className="text-sm text-muted-foreground">Free Strategies</p>
+            <p className="mt-2 text-3xl font-semibold">{freeStrategies}</p>
+          </div>
+
+          <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
+            <p className="text-sm text-muted-foreground">Premium Strategies</p>
+            <p className="mt-2 text-3xl font-semibold">{paidStrategies}</p>
           </div>
         </div>
-      </div>
-      {selectedStrategy && (
-        <StrategyModal
-          strategy={selectedStrategy}
-          onClose={() => setSelectedStrategy(null)}
-        />
-      )}
+
+        <div className="p-4 flex justify-between items-center gap-4 flex-wrap rounded-xl border bg-card text-card-foreground shadow-sm">
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              variant={selectedFilter === "all" ? "default" : "outline"}
+              className={
+                selectedFilter === "all"
+                  ? "bg-yellow-500 hover:bg-yellow-600 text-black"
+                  : ""
+              }
+              onClick={() => setSelectedFilter("all")}
+            >
+              All
+            </Button>
+
+            <Button
+              variant={selectedFilter === "default" ? "default" : "outline"}
+              className={
+                selectedFilter === "default"
+                  ? "bg-yellow-500 hover:bg-yellow-600 text-black"
+                  : ""
+              }
+              onClick={() => setSelectedFilter("default")}
+            >
+              Default
+            </Button>
+
+            <Button
+              variant={selectedFilter === "marketplace" ? "default" : "outline"}
+              className={
+                selectedFilter === "marketplace"
+                  ? "bg-yellow-500 hover:bg-yellow-600 text-black"
+                  : ""
+              }
+              onClick={() => setSelectedFilter("marketplace")}
+            >
+              Marketplace
+            </Button>
+          </div>
+
+          <Input
+            placeholder="Search strategies..."
+            className="w-full sm:w-72"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        {error && (
+          <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 p-4">
+            <h2 className="font-semibold">Failed to load marketplace</h2>
+            <p className="text-sm mt-1">{error}</p>
+          </div>
+        )}
+
+        {!error && filteredStrategies.length === 0 && (
+          <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-10 text-center">
+            <p className="text-lg font-medium">No strategies found</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Try changing your search or filter.
+            </p>
+          </div>
+        )}
+
+        {!error && filteredStrategies.length > 0 && (
+          <StrategyGrid
+            filteredStrategies={filteredStrategies}
+            viewMode="grid"
+            onSelectStrategy={(strategy: Strategy) => setSelectedStrategy(strategy)}
+            onBuyNow={handleBuyNow}
+          />
+        )}
+
+        {selectedStrategy && (
+          <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-6">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Selected Strategy
+                </p>
+                <h2 className="text-2xl font-semibold">{selectedStrategy.name}</h2>
+                <p className="text-muted-foreground max-w-3xl">
+                  {selectedStrategy.description}
+                </p>
+              </div>
+
+              <Button variant="outline" onClick={() => setSelectedStrategy(null)}>
+                Close
+              </Button>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-4">
+              <div className="rounded-xl border bg-background p-4">
+                <p className="text-sm text-muted-foreground">Creator</p>
+                <p className="mt-1 font-medium">{selectedStrategy.creator}</p>
+              </div>
+
+              <div className="rounded-xl border bg-background p-4">
+                <p className="text-sm text-muted-foreground">Category</p>
+                <p className="mt-1 font-medium">{selectedStrategy.category}</p>
+              </div>
+
+              <div className="rounded-xl border bg-background p-4">
+                <p className="text-sm text-muted-foreground">Risk</p>
+                <p className="mt-1 font-medium capitalize">{selectedStrategy.riskLevel}</p>
+              </div>
+
+              <div className="rounded-xl border bg-background p-4">
+                <p className="text-sm text-muted-foreground">Price</p>
+                <p className="mt-1 font-medium">
+                  {selectedStrategy.price === "free"
+                    ? "Free"
+                    : `$${selectedStrategy.price}`}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <Button
+                onClick={() => handleBuyNow(selectedStrategy)}
+                className="bg-yellow-500 hover:bg-yellow-600 text-black"
+              >
+                {selectedStrategy.price === "free" ? "Get Now" : "Buy Now"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   );
 }

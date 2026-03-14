@@ -11,25 +11,20 @@ import {
   AlertCircle,
   CheckCircle,
 } from "lucide-react";
+import { buildGatewayUrl } from "@/lib/config/gateway";
 
 interface Balance {
   asset: string;
   free: string;
-  locked: string;
+  locked?: string;
 }
-
-// Mock balance data for demonstration
-const MOCK_BALANCES: Balance[] = [
-  { asset: "BTC", free: "0.05234", locked: "0.00000" },
-  { asset: "ETH", free: "1.23456", locked: "0.10000" },
-  { asset: "USDT", free: "1500.00000", locked: "0.00000" },
-  { asset: "BNB", free: "5.67890", locked: "0.50000" },
-];
 
 export default function Wallet() {
   const [apiKey, setApiKey] = useState("");
   const [secretKey, setSecretKey] = useState("");
   const [showSecret, setShowSecret] = useState(false);
+  const [environment, setEnvironment] = useState<"production" | "testnet">("testnet");
+  const [connectedEnvironment, setConnectedEnvironment] = useState<string>("");
   const [isConnected, setIsConnected] = useState(false);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [loading, setLoading] = useState(false);
@@ -39,20 +34,46 @@ export default function Wallet() {
 
   // Check if already connected on page load
   useEffect(() => {
-    checkMockConnection();
+    checkConnection();
   }, []);
 
-  const checkMockConnection = () => {
-    const storedApiKey = localStorage.getItem('mockBinanceApiKey');
-    const storedConnected = localStorage.getItem('mockBinanceConnected');
+  const getAuthToken = () => {
+    // Check primary token key
+    const primary = localStorage.getItem('alphintra_auth_token');
+    if (primary) return primary;
+    
+    // Check legacy token keys
+    const legacyKeys = ['alphintra_jwt_token', 'auth_token', 'token'];
+    for (const key of legacyKeys) {
+      const value = localStorage.getItem(key);
+      if (value) return value;
+    }
+    
+    return null;
+  };
 
-    if (storedConnected === 'true' && storedApiKey) {
-      setIsConnected(true);
-      setMaskedApiKey(storedApiKey);
-      // Load mock balances after a short delay to simulate fetching
-      setTimeout(() => {
-        setBalances(MOCK_BALANCES);
-      }, 500);
+  const checkConnection = async () => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    try {
+      const response = await fetch(buildGatewayUrl("/wallet/binance/connection-status"), {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.connected) {
+          setIsConnected(true);
+          setConnectedEnvironment(data.environment || "testnet");
+          // Fetch balances after confirming connection
+          fetchBalances();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to check connection:", err);
     }
   };
 
@@ -76,66 +97,164 @@ export default function Wallet() {
       return;
     }
 
+    const token = getAuthToken();
+    if (!token) {
+      setError("Please log in to connect wallet");
+      return;
+    }
+
     setLoading(true);
     setError("");
     setSuccess("");
 
-    // Simulate API call delay for realistic feel
-    setTimeout(() => {
-      // Mock successful connection
-      const masked = apiKey.slice(-4);
-      setMaskedApiKey(masked);
-      setIsConnected(true);
-      setSuccess("Successfully connected to Binance!");
+    try {
+      const response = await fetch(buildGatewayUrl("/wallet/binance/connect"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          apiKey,
+          secretKey,
+          environment: environment, // Use selected environment
+        }),
+      });
 
-      // Store in localStorage for persistence
-      localStorage.setItem('mockBinanceConnected', 'true');
-      localStorage.setItem('mockBinanceApiKey', masked);
+      const data = await response.json();
 
-      // Clear form inputs
-      setApiKey("");
-      setSecretKey("");
+      if (response.ok) {
+        const masked = apiKey.slice(-4);
+        setMaskedApiKey(masked);
+        setIsConnected(true);
+        setConnectedEnvironment(environment);
+        setSuccess(`Successfully connected to Binance ${environment === "testnet" ? "Testnet" : "Production"}!`);
 
-      // Load mock balances after connection
-      setTimeout(() => {
-        setBalances(MOCK_BALANCES);
-        setLoading(false);
-        // Clear success message after 3 seconds
-        setTimeout(() => setSuccess(""), 3000);
-      }, 800);
-    }, 1200); // 1.2 second delay to simulate network request
+        // Clear form inputs
+        setApiKey("");
+        setSecretKey("");
+
+        // Load balances after connection
+        setTimeout(() => {
+          fetchBalances();
+          setTimeout(() => setSuccess(""), 3000);
+        }, 800);
+      } else {
+        setError(data.detail || "Failed to connect to Binance");
+      }
+    } catch (err) {
+      setError("Network error. Please try again.");
+      console.error("Connection error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchBalances = async () => {
+    const token = getAuthToken();
+    if (!token) {
+      setError("Please log in to fetch balances");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
-    // Simulate fetching delay
-    setTimeout(() => {
-      setBalances(MOCK_BALANCES);
+    try {
+      // Use the cached balance endpoint (from database)
+      const response = await fetch(buildGatewayUrl("/wallet/balance"), {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setBalances(data.balances || []);
+        setSuccess("Balances loaded successfully!");
+        setTimeout(() => setSuccess(""), 2000);
+      } else {
+        const errorData = await response.json();
+        setError(errorData.detail || "Failed to fetch balances");
+      }
+    } catch (err) {
+      setError("Network error. Please try again.");
+      console.error("Fetch balances error:", err);
+    } finally {
       setLoading(false);
-      setSuccess("Balances refreshed successfully!");
-      setTimeout(() => setSuccess(""), 2000);
-    }, 600);
+    }
   };
 
-  const disconnect = () => {
-    // Clear all states
-    setIsConnected(false);
-    setBalances([]);
-    setMaskedApiKey("");
-    setApiKey("");
-    setSecretKey("");
+  const refreshBalancesFromBinance = async () => {
+    const token = getAuthToken();
+    if (!token) {
+      setError("Please log in to refresh balances");
+      return;
+    }
+
+    setLoading(true);
     setError("");
-    setSuccess("");
 
-    // Clear from localStorage
-    localStorage.removeItem('mockBinanceConnected');
-    localStorage.removeItem('mockBinanceApiKey');
+    try {
+      // Fetch fresh balance from Binance API (requires valid API keys)
+      const response = await fetch(buildGatewayUrl("/wallet/binance/balances"), {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
 
-    setSuccess("Disconnected from Binance");
-    setTimeout(() => setSuccess(""), 2000);
+      if (response.ok) {
+        const data = await response.json();
+        setBalances(data.balances || []);
+        setSuccess("Balances refreshed from Binance!");
+        setTimeout(() => setSuccess(""), 2000);
+      } else {
+        const errorData = await response.json();
+        // Fall back to cached balance if API call fails
+        setError("Using cached balance. " + (errorData.detail || ""));
+        fetchBalances();
+      }
+    } catch (err) {
+      setError("Network error. Using cached balance.");
+      fetchBalances();
+      console.error("Refresh balances error:", err);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const disconnect = async () => {
+    const token = getAuthToken();
+    if (!token) return;
+
+    try {
+      const response = await fetch(buildGatewayUrl("/wallet/binance/disconnect"), {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+        },
+      });
+
+      if (response.ok) {
+        // Clear all states
+        setIsConnected(false);
+        setBalances([]);
+        setMaskedApiKey("");
+        setConnectedEnvironment("");
+        setApiKey("");
+        setSecretKey("");
+        setError("");
+        setSuccess("Disconnected from Binance");
+        setTimeout(() => setSuccess(""), 2000);
+      } else {
+        setError("Failed to disconnect");
+      }
+    } catch (err) {
+      setError("Network error during disconnect");
+      console.error("Disconnect error:", err);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -153,7 +272,7 @@ export default function Wallet() {
               type="button"
               onClick={fetchBalances}
               disabled={loading}
-              className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+              className="flex items-center gap-2 bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
             >
               <RefreshCw
                 className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
@@ -191,9 +310,9 @@ export default function Wallet() {
               <div>
                 <label className="block text-sm font-medium mb-2">
                   Binance API Key
-                  {/* <span className="text-xs text-muted-foreground ml-2">
+                  <span className="text-xs text-muted-foreground ml-2">
                     (Must be 64 characters)
-                  </span> */}
+                  </span>
                 </label>
                 <input
                   type="text"
@@ -203,9 +322,6 @@ export default function Wallet() {
                   className="w-full p-3 bg-muted/20 border border-muted rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 font-mono text-sm"
                   maxLength={64}
                 />
-                {/* <div className="text-xs text-muted-foreground mt-1">
-                  Length: {apiKey.length}/64 characters
-                </div> */}
               </div>
 
               <div>
@@ -236,9 +352,23 @@ export default function Wallet() {
                     )}
                   </button>
                 </div>
-                {/* <div className="text-xs text-muted-foreground mt-1">
-                  Length: {secretKey.length}/64 characters
-                </div> */}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Environment
+                  <span className="text-xs text-muted-foreground ml-2">
+                    (Select Binance environment)
+                  </span>
+                </label>
+                <select
+                  value={environment}
+                  onChange={(e) => setEnvironment(e.target.value as "production" | "testnet")}
+                  className="w-full p-3 bg-muted/20 border border-muted rounded-lg focus:outline-none focus:ring-2 focus:ring-yellow-500 text-sm"
+                >
+                  <option value="testnet">Testnet</option>
+                  <option value="production">Production</option>
+                </select>
               </div>
 
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
@@ -249,7 +379,7 @@ export default function Wallet() {
                   <li>• Only use API keys with &quot;Read&quot; permissions</li>
                   <li>• Never share your secret key with anyone</li>
                   <li>• Keys are encrypted and stored securely</li>
-                  <li>• Demo mode: Enter any 64-character keys to connect</li>
+                  <li>• {environment === "testnet" ? "Testnet keys are for testing only" : "Production keys will access your real funds"}</li>
                 </ul>
               </div>
 
@@ -281,10 +411,10 @@ export default function Wallet() {
                     <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                     <div>
                       <span className="font-semibold text-green-400">
-                        Connected to Binance
+                        Connected to Binance {connectedEnvironment === "testnet" ? "Testnet" : "Production"}
                       </span>
                       <p className="text-sm text-muted-foreground">
-                        API Key: ****{maskedApiKey || '****'} • Status: Active
+                        API Key: ****{maskedApiKey || '****'} • Status: Active • Environment: {connectedEnvironment}
                       </p>
                     </div>
                   </div>
@@ -313,7 +443,13 @@ export default function Wallet() {
                 </div>
               ) : balances.length > 0 ? (
                 <div className="space-y-3">
-                  {balances.map((balance) => (
+                  {balances
+                    .filter((balance) => 
+                      connectedEnvironment === "testnet" 
+                        ? balance.asset === "USDT" 
+                        : true
+                    )
+                    .map((balance) => (
                     <div
                       key={balance.asset}
                       className="flex items-center justify-between p-4 bg-muted/20 rounded-lg hover:bg-muted/30 transition-colors"
@@ -333,12 +469,12 @@ export default function Wallet() {
                       </div>
                       <div className="text-right">
                         <div className="font-semibold text-lg">
-                          {(
-                            parseFloat(balance.free) +
-                            parseFloat(balance.locked)
-                          ).toFixed(8)}
+                          {balance.locked 
+                            ? (parseFloat(balance.free) + parseFloat(balance.locked)).toFixed(8)
+                            : parseFloat(balance.free).toFixed(8)
+                          }
                         </div>
-                        {parseFloat(balance.locked) > 0 && (
+                        {balance.locked && parseFloat(balance.locked) > 0 && (
                           <div className="text-sm text-orange-400">
                             Locked: {parseFloat(balance.locked).toFixed(8)}
                           </div>
@@ -346,11 +482,6 @@ export default function Wallet() {
                       </div>
                     </div>
                   ))}
-                  <div className="mt-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-                    <p className="text-sm text-blue-400 text-center">
-                      💡 Demo Mode: Displaying mock balance data for demonstration
-                    </p>
-                  </div>
                 </div>
               ) : (
                 <div className="text-center py-8 text-muted-foreground">

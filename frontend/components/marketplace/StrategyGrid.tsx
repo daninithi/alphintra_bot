@@ -5,17 +5,24 @@ interface StrategyGridProps {
   filteredStrategies: Strategy[];
   viewMode: 'grid' | 'list';
   onSelectStrategy: (strategy: Strategy) => void;
+  onBuyNow?: (strategy: Strategy) => void;
 }
 
-export default function StrategyGrid({ filteredStrategies, viewMode, onSelectStrategy }: StrategyGridProps) {
+export default function StrategyGrid({
+  filteredStrategies,
+  viewMode,
+  onSelectStrategy,
+  onBuyNow,
+}: StrategyGridProps) {
   return (
     <div className={viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4' : 'space-y-4'}>
       {filteredStrategies.map((strategy) => (
-        <StrategyVisualCard 
-          key={strategy.id} 
+        <StrategyVisualCard
+          key={strategy.id}
           strategy={strategy}
           viewMode={viewMode}
           onClick={() => onSelectStrategy(strategy)}
+          onBuyNow={onBuyNow}
         />
       ))}
     </div>

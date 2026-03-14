@@ -4,12 +4,6 @@ import { SidebarItemType } from "./types";
 
 export const mainSidebarItems: SidebarItemType[] = [
   {
-    id: "dashboard",
-    name: "Dashboard",
-    icon: "solar:widget-add-line-duotone",
-    url: "/dashboard",
-  },
-  {
     id: "ticketing",
     name: "Ticketing",
     icon:  "solar:ticket-line-duotone",

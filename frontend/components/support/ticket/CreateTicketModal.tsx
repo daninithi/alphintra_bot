@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { X, Plus, Upload, AlertTriangle, Bug, HelpCircle, Settings, CreditCard } from 'lucide-react';
+import { Plus, AlertTriangle, Bug, HelpCircle, Settings, CreditCard } from 'lucide-react';
 import { 
   customerSupportApi, 
   CreateTicketRequest,
@@ -17,6 +17,8 @@ import {
   formatCategory,
   formatPriority
 } from '@/lib/api/customer-support-api';
+import { getUser, getUserDisplayName, getUserEmail } from '@/lib/auth';
+import { sendSupportTicketEmail } from '@/lib/email/support-ticket';
 import { toast } from 'react-hot-toast';
 
 const CATEGORY_ICONS = {
@@ -58,8 +60,12 @@ export default function CreateTicketModal({
   });
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
-  const [attachments, setAttachments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const currentUser = getUser();
+  const currentUserEmail = getUserEmail();
+  const userName = useMemo(() => {
+    return getUserDisplayName() || userEmail || currentUserEmail || 'Alphintra User';
+  }, [userEmail, currentUserEmail]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,16 +80,37 @@ export default function CreateTicketModal({
     try {
       const request: CreateTicketRequest = {
         userId,
+        userEmail: userEmail ?? currentUserEmail ?? currentUser?.email,
+        userName,
         title: formData.title.trim(),
         description: formData.description.trim(),
         category: formData.category,
         priority: formData.priority || undefined,
         tags: tags.length > 0 ? tags : undefined,
-        errorLogs: formData.errorLogs || undefined,
-        attachments: attachments.length > 0 ? attachments : undefined
+        errorLogs: formData.errorLogs || undefined
       };
 
-      await customerSupportApi.createTicket(request);
+      const createdTicket = await customerSupportApi.createTicket(request);
+
+      if (createdTicket.notificationRecipientEmail) {
+        try {
+          await sendSupportTicketEmail({
+            toEmail: createdTicket.notificationRecipientEmail,
+            toName: createdTicket.notificationRecipientName,
+            replyTo: userEmail ?? currentUserEmail ?? currentUser?.email,
+            senderName: userName,
+            senderEmail: userEmail ?? currentUserEmail ?? currentUser?.email,
+            subject: createdTicket.notificationSubject ?? `New support ticket #${createdTicket.id}`,
+            ticketId: String(createdTicket.id),
+            ticketTitle: formData.title.trim(),
+            messageType: 'New Support Ticket',
+            message: `${formData.description.trim()}${formData.errorLogs ? `\n\nError Logs:\n${formData.errorLogs}` : ''}`,
+          });
+        } catch (emailError) {
+          console.error('Failed to send support email:', emailError);
+          toast.error('Ticket created, but the email notification could not be sent.');
+        }
+      }
       
       toast.success('Support ticket created successfully');
       onTicketCreated();
@@ -107,7 +134,6 @@ export default function CreateTicketModal({
     });
     setTags([]);
     setTagInput('');
-    setAttachments([]);
   };
 
   const addTag = () => {
@@ -171,7 +197,7 @@ export default function CreateTicketModal({
                 onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                 placeholder="Please provide detailed information about your issue"
                 rows={4}
-                className="mt-1 placeholder-black dark:placeholder-white text-black dark:text-white" 
+                className="mt-1 text-foreground placeholder:text-muted-foreground" 
                 required
               />
             </div>
@@ -224,38 +250,6 @@ export default function CreateTicketModal({
               </div>
             </div>
           </div>
-
-          {/* Tags */}
-          <div>
-            <Label className="text-sm font-medium">Tags</Label>
-            <div className="flex flex-wrap gap-2 mb-2">
-              {tags.map(tag => (
-                <Badge key={tag} variant="secondary" className="flex items-center gap-1">
-                  {tag}
-                  <button
-                    type="button"
-                    onClick={() => removeTag(tag)}
-                    className="hover:text-red-500"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </Badge>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Input
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="Add tags to help categorize your issue"
-                className="flex-1"
-              />
-              <Button type="button" onClick={addTag} variant="outline" size="sm">
-                <Plus className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
 {/* Error Logs */}
           <div>
             <Label htmlFor="errorLogs" className="text-sm font-medium">
@@ -271,23 +265,9 @@ export default function CreateTicketModal({
             />
           </div>
 
-          {/* File Attachments */}
-          <div>
-            <Label className="text-sm font-medium">Attachments</Label>
-            <div className="mt-1 border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-              <Upload className="w-8 h-8 mx-auto text-gray-400" />
-              <p className="mt-2 text-sm text-gray-600">
-                Drag and drop files here, or click to select
-              </p>
-              <p className="text-xs text-gray-500">
-                Supported formats: PNG, JPG, PDF, TXT (max 10MB)
-              </p>
-            </div>
-          </div>
-
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-6 border-t">
-            <Button type="button" variant="outline" onClick={onClose}>
+          <div className="flex justify-end gap-3 pt-6 border-t border-border">
+            <Button type="button" variant="outline" onClick={onClose} className="text-foreground">
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>

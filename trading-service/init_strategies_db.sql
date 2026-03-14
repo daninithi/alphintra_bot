@@ -2,112 +2,142 @@
 -- Trading Strategies Database Schema
 -- ============================================
 
--- Create strategies table
--- Stores all available trading strategies (default, marketplace, user-created)
 CREATE TABLE IF NOT EXISTS strategies (
     id SERIAL PRIMARY KEY,
-    strategy_id VARCHAR(100) UNIQUE NOT NULL,  -- Unique identifier (e.g., 'multi_timeframe_trend')
-    name VARCHAR(200) NOT NULL,                 -- Display name
-    description TEXT,                           -- Strategy description
-    type VARCHAR(50) NOT NULL DEFAULT 'default', -- Type: 'default', 'marketplace', 'user_created'
-    
-    -- Strategy configuration
-    parameters JSONB,                           -- Strategy-specific parameters (stop_loss, take_profit, etc.)
-    python_class VARCHAR(200),                  -- Python class name (e.g., 'MultiTimeframeTrendStrategy')
-    python_module VARCHAR(200),                 -- Python module path (e.g., 'strategies.multi_timeframe_trend')
-    
-    -- Marketplace info (if type = 'marketplace')
-    price DECIMAL(10, 2) DEFAULT 0,            -- Price in USD (0 for free strategies)
-    author_id INTEGER,                          -- User ID of creator (NULL for default strategies)
+    strategy_id VARCHAR(100) UNIQUE NOT NULL,
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+    type VARCHAR(50) NOT NULL DEFAULT 'default',
+    parameters JSONB,
+    python_class VARCHAR(200),
+    python_module VARCHAR(200),
+    price DECIMAL(10, 2) DEFAULT 0,
+    author_id INTEGER,
     total_purchases INTEGER DEFAULT 0,
-
-    
-    -- Metadata
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
     CONSTRAINT chk_type CHECK (type IN ('default', 'marketplace', 'user_created'))
 );
 
--- Create user_strategies table
--- Tracks which strategies each user has access to
 CREATE TABLE IF NOT EXISTS user_strategies (
     id SERIAL PRIMARY KEY,
-    user_id INTEGER NOT NULL,                   -- Foreign key to users table
-    strategy_id VARCHAR(100) NOT NULL,          -- Foreign key to strategies.strategy_id
-    
-    -- Access info
-    access_type VARCHAR(50) NOT NULL DEFAULT 'default', -- 'default', 'purchased', 'created'
-    purchased_at TIMESTAMP,                     -- When strategy was purchased (NULL for default/created)
-    purchase_price DECIMAL(10, 2),             -- Price paid (NULL for default/created)
-    
-    
+    user_id INTEGER NOT NULL,
+    strategy_id VARCHAR(100) NOT NULL,
+    access_type VARCHAR(50) NOT NULL DEFAULT 'default',
+    purchased_at TIMESTAMP,
+    purchase_price DECIMAL(10, 2),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    
     CONSTRAINT chk_access_type CHECK (access_type IN ('default', 'purchased', 'created')),
     CONSTRAINT uq_user_strategy UNIQUE(user_id, strategy_id)
 );
 
--- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_strategies_type ON strategies(type);
 CREATE INDEX IF NOT EXISTS idx_strategies_author ON strategies(author_id);
 CREATE INDEX IF NOT EXISTS idx_user_strategies_user ON user_strategies(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_strategies_strategy ON user_strategies(strategy_id);
 
--- ============================================
--- Insert Default Strategies
--- ============================================
-
-INSERT INTO strategies (strategy_id, name, description, type, python_class, python_module) 
-VALUES 
+INSERT INTO strategies (strategy_id, name, description, type, python_class, python_module, price)
+VALUES
 (
-    'multi_timeframe_trend',
-    'Multi-Timeframe Trend',
-    'A conservative strategy that uses multiple timeframes (5m, 15m, 1h) to identify strong trends with high confidence. Analyzes trend alignment across timeframes and uses moving averages (EMA 20, 50, 200) to confirm trend direction. Best suited for trending markets with clear directional momentum.',
+    'alpha_momentum_breakout',
+    'Alpha Momentum Breakout',
+    'Capitalizes on high-volume volatility breakouts in major crypto pairs. Target ROI: ~14.5%, Win Rate: ~68%.',
     'default',
-    'MultiTimeframeTrendStrategy',
-    'strategies.multi_timeframe_trend'
+    'AlphaMomentumStrategy',
+    'strategies.alpha_momentum',
+    0.00
 ),
 (
-    'rsi_mean_reversion',
-    'RSI Mean Reversion',
-    'A balanced strategy that uses RSI (Relative Strength Index) to identify oversold (RSI < 30) and overbought (RSI > 70) conditions for mean reversion trades. Includes built-in risk management with 2% stop loss and 3% take profit levels. Effective in ranging markets with strong support/resistance levels.',
+    'stablecoin_yield_harvester',
+    'Stablecoin Yield Harvester',
+    'Low-risk arbitrage and yield farming across decentralized exchanges. Target ROI: ~4.2%, Win Rate: ~95%.',
     'default',
-    'RSIMeanReversionStrategy',
-    'strategies.rsi_mean_reversion'
+    'YieldHarvesterStrategy',
+    'strategies.yield_harvester',
+    0.00
 ),
 (
-    'macd_momentum',
-    'MACD Momentum',
-    'A momentum-based strategy using MACD (Moving Average Convergence Divergence) to identify trend changes and momentum shifts. Generates buy signals on MACD crossover above signal line and sell signals on crossover below. Works well in volatile markets with clear momentum swings.',
+    'quantum_mean_reversion',
+    'Quantum Mean Reversion',
+    'Statistical mean reversion strategy utilizing Bollinger Bands and RSI anomalies. Target ROI: ~8.7%, Win Rate: ~72%.',
     'default',
-    'MACDMomentumStrategy',
-    'strategies.macd_momentum'
+    'QuantumReversionStrategy',
+    'strategies.quantum_reversion',
+    0.00
+),
+(
+    'trend_follower_pro',
+    'Trend Follower Pro',
+    'Algorithmic trend-following system optimized for macro market shifts. Target ROI: ~11.2%, Win Rate: ~60%.',
+    'default',
+    'TrendFollowerStrategy',
+    'strategies.trend_follower',
+    0.00
+),
+(
+    'blue_chip_accumulator',
+    'Blue Chip Accumulator',
+    'DCA and momentum-based accumulation for top 10 market cap coins. Target ROI: ~6.5%, Win Rate: ~80%.',
+    'default',
+    'BlueChipAccumulatorStrategy',
+    'strategies.blue_chip_accumulator',
+    0.00
+),
+(
+    'flash_crash_sniper',
+    'Flash Crash Sniper',
+    'Places deep limit orders to catch flash crashes and immediate rebounds. High risk, high reward.',
+    'marketplace',
+    'FlashCrashSniperStrategy',
+    'strategies.flash_crash_sniper',
+    59.99
+),
+(
+    'forex_scalper_ai',
+    'Forex Scalper AI',
+    'High-frequency scalping algorithm optimized for major forex pairs.',
+    'marketplace',
+    'ForexScalperStrategy',
+    'strategies.forex_scalper',
+    79.99
+),
+(
+    'defi_liquidity_provider',
+    'DeFi Liquidity Provider',
+    'Automated impermanent loss hedging for AMM liquidity pools.',
+    'marketplace',
+    'DeFiLiquidityStrategy',
+    'strategies.defi_liquidity',
+    24.99
+),
+(
+    'sentiment_analysis_bot',
+    'Sentiment Analysis Bot',
+    'Scrapes news feeds and social sentiment to front-run retail shifts.',
+    'marketplace',
+    'SentimentAnalysisStrategy',
+    'strategies.sentiment_analysis',
+    89.99
+),
+(
+    'options_iron_condor',
+    'Options Iron Condor',
+    'Automated options selling strategy to collect premium in sideways markets.',
+    'marketplace',
+    'IronCondorStrategy',
+    'strategies.iron_condor',
+    34.99
 )
 ON CONFLICT (strategy_id) DO NOTHING;
 
--- ============================================
--- Grant Default Strategies to All Users
--- Note: This is a one-time operation. In production, you would
--- grant access to new users during registration.
--- ============================================
+-- Disabled for local setup because users table is not in alphintra_trading
+-- INSERT INTO user_strategies (user_id, strategy_id, access_type)
+-- SELECT DISTINCT u.id, s.strategy_id, 'default'
+-- FROM users u
+-- CROSS JOIN strategies s
+-- WHERE s.type = 'default'
+-- ON CONFLICT (user_id, strategy_id) DO NOTHING;
 
--- This will grant access to all existing users. 
--- For new users, the application should automatically grant
--- access to all default strategies during user registration.
-
-INSERT INTO user_strategies (user_id, strategy_id, access_type)
-SELECT DISTINCT u.id, s.strategy_id, 'default'
-FROM users u
-CROSS JOIN strategies s
-WHERE s.type = 'default'
-ON CONFLICT (user_id, strategy_id) DO NOTHING;
-
--- ============================================
--- Helper Functions
--- ============================================
-
--- Function to grant default strategies to a new user
 CREATE OR REPLACE FUNCTION grant_default_strategies_to_user(p_user_id INTEGER)
 RETURNS VOID AS $$
 BEGIN
@@ -119,7 +149,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Function to get all strategies accessible by a user
 CREATE OR REPLACE FUNCTION get_user_strategies(p_user_id INTEGER)
 RETURNS TABLE (
     strategy_id VARCHAR(100),
@@ -132,7 +161,7 @@ RETURNS TABLE (
 ) AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         s.strategy_id,
         s.name,
         s.description,
@@ -143,25 +172,12 @@ BEGIN
     FROM strategies s
     INNER JOIN user_strategies us ON s.strategy_id = us.strategy_id
     WHERE us.user_id = p_user_id
-    ORDER BY 
-        CASE us.access_type 
-            WHEN 'default' THEN 1 
-            WHEN 'created' THEN 2 
-            WHEN 'purchased' THEN 3 
+    ORDER BY
+        CASE us.access_type
+            WHEN 'default' THEN 1
+            WHEN 'created' THEN 2
+            WHEN 'purchased' THEN 3
         END,
         s.name;
 END;
 $$ LANGUAGE plpgsql;
-
--- ============================================
--- Sample Queries
--- ============================================
-
--- Get all strategies for a specific user
--- SELECT * FROM get_user_strategies(1);
-
--- Get only default strategies
--- SELECT * FROM strategies WHERE type = 'default';
-
--- Get marketplace strategies
--- SELECT * FROM strategies WHERE type = 'marketplace' ORDER BY total_purchases DESC;

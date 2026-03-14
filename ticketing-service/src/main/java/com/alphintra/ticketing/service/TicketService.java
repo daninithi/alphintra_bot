@@ -1,11 +1,22 @@
 package com.alphintra.ticketing.service;
 
+import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.alphintra.ticketing.client.AuthSupportClient;
+import com.alphintra.ticketing.client.dto.AuthSupportAssigneeLookupResponse;
+import com.alphintra.ticketing.client.dto.AuthSupportMember;
+import com.alphintra.ticketing.client.dto.AuthSupportMemberListResponse;
 import com.alphintra.ticketing.dto.CreateTicketRequest;
 import com.alphintra.ticketing.dto.TicketResponse;
 import com.alphintra.ticketing.dto.TicketStats;
@@ -25,74 +36,67 @@ import lombok.RequiredArgsConstructor;
 public class TicketService {
 
     private final TicketRepository ticketRepository;
+    private final AuthSupportClient authSupportClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
     public TicketResponse createTicket(CreateTicketRequest request) {
         Ticket ticket = new Ticket();
-        ticket.setStatus(TicketStatus.NEW); // Set status to NEW for new tickets
+        ticket.setStatus(TicketStatus.NEW);
         ticket.setTitle(request.getTitle());
         ticket.setDescription(request.getDescription());
         ticket.setCategory(request.getCategory());
         ticket.setPriority(request.getPriority() != null ? request.getPriority() : TicketPriority.MEDIUM);
         ticket.setCustomerId(request.getUserId());
+        ticket.setCustomerEmail(request.getUserEmail());
+        ticket.setCustomerName(request.getUserName());
         ticket.setErrorLogs(request.getErrorLogs());
+        ticket.setTags(writeStringList(request.getTags()));
+        ticket.setAttachments(null);
 
-        // Convert lists to JSON strings
-        if (request.getTags() != null && !request.getTags().isEmpty()) {
-            try {
-                ticket.setTags(objectMapper.writeValueAsString(request.getTags()));
-            } catch (JsonProcessingException e) {
-                // Handle error
-            }
-        }
-
-        if (request.getAttachments() != null && !request.getAttachments().isEmpty()) {
-            try {
-                ticket.setAttachments(objectMapper.writeValueAsString(request.getAttachments()));
-            } catch (JsonProcessingException e) {
-                // Handle error
-            }
-        }
+        routeTicket(ticket);
 
         Ticket savedTicket = ticketRepository.save(ticket);
-        return mapToResponse(savedTicket);
+
+        NotificationRouting routing = buildRoutingForTicketCreation(savedTicket);
+        return mapToResponse(savedTicket, false, routing);
     }
 
-    public List<TicketResponse> getAllTickets() {
-        return ticketRepository.findAll(org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "createdAt")).stream()
-                .map(this::mapToResponse)
+    public List<TicketResponse> getAllTickets(TicketStatus status, Long assigneeId, String customerId) {
+        return ticketRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt")).stream()
+                .filter(ticket -> status == null || ticket.getStatus() == status)
+                .filter(ticket -> assigneeId == null || Objects.equals(ticket.getAssigneeId(), assigneeId))
+                .filter(ticket -> customerId == null || Objects.equals(ticket.getCustomerId(), customerId))
+                .map(ticket -> mapToResponse(ticket, true, null))
                 .collect(Collectors.toList());
     }
 
-    public TicketResponse getTicketById(Long id) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
-        return mapToResponse(ticket);
+    public TicketResponse getTicketById(Long id, boolean agentView) {
+        Ticket ticket = getTicketEntity(id);
+        return mapToResponse(ticket, agentView, null);
     }
 
     public List<TicketResponse> getTicketsByCustomer(String customerId) {
         return ticketRepository.findByCustomerIdOrderByCreatedAtDesc(customerId).stream()
-                .map(this::mapToResponse)
+                .map(ticket -> mapToResponse(ticket, false, null))
                 .collect(Collectors.toList());
     }
 
     public List<TicketResponse> getTicketsByAssignee(Long assigneeId) {
         return ticketRepository.findByAssigneeIdOrderByCreatedAtDesc(assigneeId).stream()
-                .map(this::mapToResponse)
+                .map(ticket -> mapToResponse(ticket, true, null))
                 .collect(Collectors.toList());
     }
 
     public List<TicketResponse> getTicketsByStatus(TicketStatus status) {
         return ticketRepository.findByStatusOrderByCreatedAtDesc(status).stream()
-                .map(this::mapToResponse)
+                .map(ticket -> mapToResponse(ticket, true, null))
                 .collect(Collectors.toList());
     }
 
     @Transactional
-    public TicketResponse updateTicket(Long id, UpdateTicketRequest request) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+    public TicketResponse updateTicket(Long id, UpdateTicketRequest request, boolean agentView) {
+        Ticket ticket = getTicketEntity(id);
 
         if (request.getTitle() != null) {
             ticket.setTitle(request.getTitle());
@@ -111,31 +115,25 @@ public class TicketService {
         }
         if (request.getAssigneeId() != null) {
             ticket.setAssigneeId(request.getAssigneeId());
+            AuthSupportMember assignee = resolveSupportMember(request.getAssigneeId()).orElse(null);
+            ticket.setAssigneeName(request.getAssigneeName() != null ? request.getAssigneeName() : assignee != null ? assignee.getUsername() : ticket.getAssigneeName());
+            ticket.setAssigneeEmail(request.getAssigneeEmail() != null ? request.getAssigneeEmail() : assignee != null ? assignee.getEmail() : ticket.getAssigneeEmail());
+            if (ticket.getStatus() == TicketStatus.NEW) {
+                ticket.setStatus(TicketStatus.ASSIGNED);
+            }
         }
         if (request.getErrorLogs() != null) {
             ticket.setErrorLogs(request.getErrorLogs());
         }
-
-        // Update tags
         if (request.getTags() != null) {
-            try {
-                ticket.setTags(objectMapper.writeValueAsString(request.getTags()));
-            } catch (JsonProcessingException e) {
-                // Handle error
-            }
+            ticket.setTags(writeStringList(request.getTags()));
         }
-
-        // Update attachments
         if (request.getAttachments() != null) {
-            try {
-                ticket.setAttachments(objectMapper.writeValueAsString(request.getAttachments()));
-            } catch (JsonProcessingException e) {
-                // Handle error
-            }
+            ticket.setAttachments(null);
         }
 
         Ticket updatedTicket = ticketRepository.save(ticket);
-        return mapToResponse(updatedTicket);
+        return mapToResponse(updatedTicket, agentView, null);
     }
 
     @Transactional
@@ -148,33 +146,145 @@ public class TicketService {
 
     @Transactional
     public TicketResponse assignTicket(Long id, Long assigneeId) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+        Ticket ticket = getTicketEntity(id);
+        AuthSupportMember assignee = resolveSupportMember(assigneeId)
+                .orElseThrow(() -> new RuntimeException("Support member not found"));
+
         ticket.setAssigneeId(assigneeId);
-        ticket.setStatus(TicketStatus.IN_PROGRESS);
+        ticket.setAssigneeName(assignee.getUsername());
+        ticket.setAssigneeEmail(assignee.getEmail());
+        ticket.setStatus(TicketStatus.ASSIGNED);
+
         Ticket updatedTicket = ticketRepository.save(ticket);
-        return mapToResponse(updatedTicket);
+        return mapToResponse(updatedTicket, true, null);
     }
 
     @Transactional
     public TicketResponse resolveTicket(Long id) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+        Ticket ticket = getTicketEntity(id);
         ticket.setStatus(TicketStatus.RESOLVED);
         Ticket updatedTicket = ticketRepository.save(ticket);
-        return mapToResponse(updatedTicket);
+        return mapToResponse(updatedTicket, true, null);
     }
 
     @Transactional
     public TicketResponse reopenTicket(Long id) {
-        Ticket ticket = ticketRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Ticket not found"));
-        ticket.setStatus(TicketStatus.OPEN);
+        Ticket ticket = getTicketEntity(id);
+        ticket.setStatus(TicketStatus.REOPENED);
         Ticket updatedTicket = ticketRepository.save(ticket);
-        return mapToResponse(updatedTicket);
+        return mapToResponse(updatedTicket, false, null);
     }
 
-    private TicketResponse mapToResponse(Ticket ticket) {
+    public TicketStats getTicketStatsForUser(String userId) {
+        TicketStats stats = new TicketStats();
+        List<Ticket> userTickets = ticketRepository.findByCustomerIdOrderByCreatedAtDesc(userId);
+
+        stats.setTotalTickets(userTickets.size());
+        stats.setOpenTickets((int) userTickets.stream()
+                .filter(ticket -> ticket.getStatus() == TicketStatus.NEW
+                        || ticket.getStatus() == TicketStatus.ASSIGNED
+                        || ticket.getStatus() == TicketStatus.IN_PROGRESS
+                        || ticket.getStatus() == TicketStatus.ESCALATED
+                        || ticket.getStatus() == TicketStatus.REOPENED
+                        || ticket.getStatus() == TicketStatus.OPEN
+                        || ticket.getStatus() == TicketStatus.PENDING)
+                .count());
+        stats.setResolvedTickets((int) userTickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.RESOLVED).count());
+        stats.setClosedTickets((int) userTickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.CLOSED).count());
+        stats.setAverageResolutionTimeHours(0.0);
+        stats.setAverageSatisfactionRating(0.0);
+        stats.setHighPriorityTickets((int) userTickets.stream()
+                .filter(ticket -> ticket.getPriority() == TicketPriority.HIGH
+                        || ticket.getPriority() == TicketPriority.URGENT
+                        || ticket.getPriority() == TicketPriority.CRITICAL)
+                .count());
+        stats.setEscalatedTickets((int) userTickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.ESCALATED).count());
+        stats.setTicketsByCategory(userTickets.stream().collect(Collectors.groupingBy(ticket -> ticket.getCategory().name(), Collectors.counting())));
+        stats.setTicketsByPriority(userTickets.stream().collect(Collectors.groupingBy(ticket -> ticket.getPriority().name(), Collectors.counting())));
+        stats.setTicketsByStatus(userTickets.stream().collect(Collectors.groupingBy(ticket -> ticket.getStatus().name(), Collectors.counting())));
+        stats.setDailyTicketCreation(null);
+        return stats;
+    }
+
+    public List<Map<String, Object>> getSupportAgents() {
+        AuthSupportMemberListResponse response = authSupportClient.getActiveMembers();
+        List<AuthSupportMember> members = response != null && response.getMembers() != null ? response.getMembers() : List.of();
+
+        return members.stream()
+                .sorted(Comparator.comparing(AuthSupportMember::getUsername, Comparator.nullsLast(String::compareToIgnoreCase)))
+            .map(member -> {
+                Map<String, Object> agent = new LinkedHashMap<>();
+                agent.put("agentId", String.valueOf(member.getId()));
+                agent.put("username", Optional.ofNullable(member.getUsername()).orElse("support"));
+                agent.put("email", Optional.ofNullable(member.getEmail()).orElse(""));
+                agent.put("firstName", Optional.ofNullable(member.getUsername()).orElse("Support"));
+                agent.put("lastName", "");
+                agent.put("fullName", Optional.ofNullable(member.getUsername()).orElse("Support"));
+                agent.put("agentLevel", mapAgentLevel(member.getSpecializationLevel()));
+                agent.put("status", Boolean.TRUE.equals(member.getActive()) ? "AVAILABLE" : "OFFLINE");
+                agent.put("specializations", member.getAssignedCategory() == null ? List.of() : List.of(member.getAssignedCategory()));
+                agent.put("currentTicketCount", Optional.ofNullable(member.getCurrentTicketCount()).orElse(Optional.ofNullable(member.getCurrentLoad()).orElse(0)));
+                agent.put("maxConcurrentTickets", Optional.ofNullable(member.getMaxTickets()).orElse(10));
+                agent.put("isActive", Boolean.TRUE.equals(member.getActive()));
+                return agent;
+            })
+                .collect(Collectors.toList());
+    }
+
+    private void routeTicket(Ticket ticket) {
+        try {
+            AuthSupportAssigneeLookupResponse response = authSupportClient.findBestAssignee(
+                    ticket.getCategory().name(),
+                    isHighPriority(ticket.getPriority()));
+
+            if (response != null && response.isSuccess() && response.getAssignee() != null) {
+                AuthSupportMember assignee = response.getAssignee();
+                ticket.setAssigneeId(assignee.getId());
+                ticket.setAssigneeName(assignee.getUsername());
+                ticket.setAssigneeEmail(assignee.getEmail());
+                ticket.setStatus(TicketStatus.ASSIGNED);
+                return;
+            }
+        } catch (Exception ignored) {
+            // Fall back to admin email when assignee lookup is unavailable.
+        }
+
+        AdminContact adminContact = resolveAdminContact();
+        ticket.setAssigneeId(adminContact.id());
+        ticket.setAssigneeName(adminContact.name());
+        ticket.setAssigneeEmail(adminContact.email());
+        ticket.setStatus(TicketStatus.NEW);
+    }
+
+    private NotificationRouting buildRoutingForTicketCreation(Ticket ticket) {
+        AdminContact adminContact = resolveAdminContact();
+        return new NotificationRouting(
+            firstNonBlank(ticket.getAssigneeEmail(), adminContact.email()),
+            firstNonBlank(ticket.getAssigneeName(), adminContact.name()),
+                "New support ticket #" + ticket.getId() + ": " + ticket.getTitle());
+    }
+
+    private Optional<AuthSupportMember> resolveSupportMember(Long assigneeId) {
+        try {
+            AuthSupportMemberListResponse response = authSupportClient.getAllMembers();
+            if (response == null || response.getMembers() == null) {
+                return Optional.empty();
+            }
+
+            return response.getMembers().stream()
+                    .filter(member -> Objects.equals(member.getId(), assigneeId))
+                    .findFirst();
+        } catch (Exception error) {
+            return Optional.empty();
+        }
+    }
+
+    private Ticket getTicketEntity(Long id) {
+        return ticketRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Ticket not found"));
+    }
+
+    private TicketResponse mapToResponse(Ticket ticket, boolean agentView, NotificationRouting routing) {
         TicketResponse response = new TicketResponse();
         response.setId(ticket.getId());
         response.setTitle(ticket.getTitle());
@@ -183,49 +293,81 @@ public class TicketService {
         response.setPriority(ticket.getPriority());
         response.setCategory(ticket.getCategory());
         response.setCustomerId(ticket.getCustomerId());
+        response.setCustomerEmail(ticket.getCustomerEmail());
+        response.setCustomerName(ticket.getCustomerName());
         response.setErrorLogs(ticket.getErrorLogs());
         response.setAssigneeId(ticket.getAssigneeId());
+        response.setAssignedAgentName(ticket.getAssigneeName());
+        response.setAssignedAgentEmail(ticket.getAssigneeEmail());
         response.setCreatedAt(ticket.getCreatedAt());
         response.setUpdatedAt(ticket.getUpdatedAt());
+        response.setTags(readStringList(ticket.getTags()));
+        response.setAttachments(readStringList(ticket.getAttachments()));
 
-        // Parse JSON strings back to lists
-        if (ticket.getTags() != null && !ticket.getTags().isEmpty()) {
-            try {
-                response.setTags(objectMapper.readValue(ticket.getTags(), new TypeReference<List<String>>() {}));
-            } catch (JsonProcessingException e) {
-                response.setTags(List.of());
-            }
-        }
-
-        if (ticket.getAttachments() != null && !ticket.getAttachments().isEmpty()) {
-            try {
-                response.setAttachments(objectMapper.readValue(ticket.getAttachments(), new TypeReference<List<String>>() {}));
-            } catch (JsonProcessingException e) {
-                response.setAttachments(List.of());
-            }
+        if (routing != null) {
+            response.setNotificationRecipientEmail(routing.recipientEmail());
+            response.setNotificationRecipientName(routing.recipientName());
+            response.setNotificationSubject(routing.subject());
         }
 
         return response;
     }
 
-    public TicketStats getTicketStatsForUser(String userId) {
-        TicketStats stats = new TicketStats();
-        List<Ticket> userTickets = ticketRepository.findByCustomerIdOrderByCreatedAtDesc(userId);
+    private boolean isHighPriority(TicketPriority priority) {
+        return priority == TicketPriority.HIGH || priority == TicketPriority.URGENT || priority == TicketPriority.CRITICAL;
+    }
 
-        stats.setTotalTickets(userTickets.size());
-        stats.setOpenTickets((int) userTickets.stream().filter(t -> t.getStatus() == TicketStatus.OPEN).count());
-        stats.setResolvedTickets((int) userTickets.stream().filter(t -> t.getStatus() == TicketStatus.RESOLVED).count());
-        stats.setClosedTickets((int) userTickets.stream().filter(t -> t.getStatus() == TicketStatus.CLOSED).count());
-        // For simplicity, set others to 0 or calculate if needed
-        stats.setAverageResolutionTimeHours(0.0);
-        stats.setAverageSatisfactionRating(0.0);
-        stats.setHighPriorityTickets(0);
-        stats.setEscalatedTickets(0);
-        stats.setTicketsByCategory(null);
-        stats.setTicketsByPriority(null);
-        stats.setTicketsByStatus(null);
-        stats.setDailyTicketCreation(null);
+    private String mapAgentLevel(String specializationLevel) {
+        if (specializationLevel == null) {
+            return "L2";
+        }
 
-        return stats;
+        return switch (specializationLevel) {
+            case "JUNIOR" -> "L1";
+            case "MID" -> "L2";
+            case "SENIOR" -> "L3_SPECIALIST";
+            default -> "L2";
+        };
+    }
+
+    private String writeStringList(List<String> values) {
+        if (values == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(values);
+        } catch (JsonProcessingException error) {
+            throw new RuntimeException("Failed to serialize list field", error);
+        }
+    }
+
+    private List<String> readStringList(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(value, new TypeReference<List<String>>() { });
+        } catch (JsonProcessingException error) {
+            return List.of();
+        }
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private AdminContact resolveAdminContact() {
+        return new AdminContact(null, "Admin", null);
+    }
+
+    private record NotificationRouting(String recipientEmail, String recipientName, String subject) {
+    }
+
+    private record AdminContact(Long id, String name, String email) {
     }
 }

@@ -69,7 +69,7 @@ app = FastAPI(title="Alphintra Trading Service", version="1.0.0")
 JWT_SECRET = os.getenv("JWT_SECRET", "zEseNVzJiNEFsxOKygzayk4hHjSp2UJMzHMwSjWWfqE=")
 
 # Database Configuration (Fixed: Use trading database instead of wallet database)
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_trading")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_trading")
 
 # CORS handled by API Gateway - do not add CORS middleware here
 # app.add_middleware(CORSMiddleware, ...) - DISABLED
@@ -193,7 +193,7 @@ def get_available_balance(user_id: int = None) -> float:
     
     try:
         # Connect to wallet database
-        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_wallet")
         conn = psycopg2.connect(wallet_db_url)
         cur = conn.cursor()
         
@@ -224,7 +224,7 @@ def get_available_balance(user_id: int = None) -> float:
 def update_wallet_balance(user_id: int, currency: str, amount_change: float) -> bool:
     """Update balance in wallet service database after trade execution."""
     try:
-        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_wallet")
         conn = psycopg2.connect(wallet_db_url)
         cur = conn.cursor()
         
@@ -278,7 +278,7 @@ def check_wallet_connection(user_id: int) -> dict:
     """Check if user has an active wallet connection in wallet service"""
     try:
         # Connect to wallet database (not trading database)
-        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_wallet")
         conn = psycopg2.connect(wallet_db_url)
         cur = conn.cursor()
         
@@ -871,53 +871,6 @@ async def track_strategy_usage(strategy_id: str, user_id: int = Depends(get_curr
     except Exception as e:
         logger.error(f"Failed to track strategy usage: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to track usage: {str(e)}")
-
-# ============================================
-# Admin Endpoints
-# ============================================
-
-@app.get("/admin/users/{user_id}/strategies")
-async def admin_get_user_strategies(
-    user_id: int,
-    admin_user_id: int = Depends(get_current_user_id)
-):
-    """
-    Admin endpoint: get strategies and latest bot execution status for a specific user.
-    Requires a valid JWT (admin must be authenticated).
-    """
-    db = get_db()
-    try:
-        strategy_db = StrategyDB()
-        strategies = strategy_db.get_user_strategies(user_id)
-        strategy_db.close()
-
-        # Fetch all executions for this user, most recent first
-        executions = db.query(BotExecution).filter(
-            BotExecution.user_id == user_id
-        ).order_by(BotExecution.created_at.desc()).all()
-
-        # Build a map of strategy_id -> latest execution dict
-        latest_by_strategy: dict = {}
-        for execution in executions:
-            sid = execution.strategy_name
-            if sid not in latest_by_strategy:
-                latest_by_strategy[sid] = execution.to_dict()
-
-        result = []
-        for s in strategies:
-            bot_exec = latest_by_strategy.get(s.strategy_id)
-            entry = s.to_dict()
-            entry["bot_status"] = bot_exec["status"] if bot_exec else None
-            entry["last_run"] = bot_exec["last_run"] if bot_exec else None
-            entry["bot_started_at"] = bot_exec["created_at"] if bot_exec else None
-            result.append(entry)
-
-        return {"status": "success", "data": result}
-    except Exception as e:
-        logger.error(f"Admin: failed to get strategies for user {user_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to fetch user strategies: {str(e)}")
-    finally:
-        db.close()
 
 if __name__ == "__main__":
     # Initialize database

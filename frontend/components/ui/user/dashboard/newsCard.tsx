@@ -10,12 +10,23 @@ import { cn } from "@/lib/utils"; // your classnames helper
 
 const NewsCard: React.FC = () => {
   const { resolvedTheme } = useTheme();
+  const apiKey = process.env.NEXT_PUBLIC_CRYPTOCOMPARE_API_KEY;
+  const newsUrl = apiKey
+    ? `https://min-api.cryptocompare.com/data/v2/news/?lang=EN&categories=Cryptocurrency&api_key=${apiKey}`
+    : null;
 
   const { data, error, isLoading } = useSWR<{ Data: NewsItem[] }>(
-    `https://min-api.cryptocompare.com/data/v2/news/?lang=EN&categories=Cryptocurrency&api_key=${process.env.NEXT_PUBLIC_CRYPTOCOMPARE_API_KEY || ''}`,
+    newsUrl,
     newsFetcher,
     { refreshInterval: 600000 } // Refresh every 10 minutes
   );
+
+  React.useEffect(() => {
+    if (data) {
+      console.log("Crypto news response:", data);
+    }
+  }, [data]);
+
 
   if (error)
     return <div className="text-center text-yellow-500">Failed to load news</div>;
@@ -26,7 +37,8 @@ const NewsCard: React.FC = () => {
       </div>
     );
 
-  const newsItems = data?.Data?.slice(0, 3) || [];
+  const rawNewsItems = data?.Data;
+  const newsItems = Array.isArray(rawNewsItems) ? rawNewsItems.slice(0, 3) : [];
 
   return (
     <div className="space-y-4">

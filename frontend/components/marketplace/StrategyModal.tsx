@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { useRouter } from 'next/navigation';
-
+import { marketplaceApi } from "@/lib/api/marketplace-api"
 // Define the component props
 interface StrategyModalProps {
     strategy: Strategy;
@@ -185,3 +185,31 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon: Icon, color }) 
         </CardContent>
     </Card>
 );
+
+async function handleBuy(strategyId: string) {
+
+  try {
+
+    const userId = 1 // temporary until auth integration
+
+    await marketplaceApi.buyStrategy(strategyId, userId)
+
+    alert("Strategy purchased successfully")
+
+  } catch (error) {
+
+    console.error(error)
+
+    alert("Purchase failed")
+
+  }
+
+}
+
+
+<button
+  onClick={() => handleBuy(strategy.strategyId)}
+  className="bg-yellow-500 text-black px-4 py-2 rounded"
+>
+Buy Strategy
+</button>
