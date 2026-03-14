@@ -1,33 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { 
   MessageSquare, 
-  Clock, 
   User, 
   Calendar, 
   Tag,
-  Send,
-  Phone,
-  Mail,
-  Eye,
-  TrendingUp,
-  AlertTriangle
 } from 'lucide-react';
 import { 
-  customerSupportApi, 
   Ticket, 
-  Communication,
   TicketStatus, 
   TicketPriority,
-  SenderType,
-  CreateCommunicationRequest,
   UpdateTicketRequest,
   formatStatus,
   formatPriority,
@@ -55,72 +43,19 @@ export default function TicketDetailModal({
   isAgentView = false,
   agentId 
 }: TicketDetailModalProps) {
-  const [communications, setCommunications] = useState<Communication[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const ticketId = String(ticket.id);
+  const ticketPriority = ticket.priority ?? TicketPriority.MEDIUM;
   
   // Agent controls
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [updatingPriority, setUpdatingPriority] = useState(false);
 
-  useEffect(() => {
-    if (isOpen && ticket.ticketId) {
-      loadCommunications();
-    }
-  }, [isOpen, ticket.ticketId]);
-
-  const loadCommunications = async () => {
-    setLoading(true);
-    try {
-      const comms = await customerSupportApi.getTicketCommunications(ticket.ticketId);
-      setCommunications(comms);
-    } catch (error) {
-      console.error('Failed to load communications:', error);
-      toast.error('Failed to load ticket communications');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!newMessage.trim()) {
-      toast.error('Please enter a message');
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const request: CreateCommunicationRequest = {
-        content: newMessage.trim(),
-        isInternal: isAgentView || false
-      };
-
-      const newComm = await customerSupportApi.addCommunication(ticket.ticketId, request);
-      setCommunications(prev => [...prev, newComm]);
-      setNewMessage('');
-      
-      // Update ticket status if it's NEW
-      if (ticket.status === TicketStatus.NEW && isAgentView) {
-        await handleStatusUpdate(TicketStatus.IN_PROGRESS);
-      }
-      
-      toast.success('Message sent successfully');
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      toast.error('Failed to send message');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const handleStatusUpdate = async (newStatus: TicketStatus) => {
     setUpdatingStatus(true);
     try {
       const request: UpdateTicketRequest = { status: newStatus };
-      const updatedTicket = await customerSupportApi.updateTicket(ticket.ticketId, request);
+      const { customerSupportApi } = await import('@/lib/api/customer-support-api');
+      const updatedTicket = await customerSupportApi.updateTicket(ticketId, request, isAgentView);
       onTicketUpdated(updatedTicket);
       toast.success('Ticket status updated');
     } catch (error) {
@@ -135,7 +70,8 @@ export default function TicketDetailModal({
     setUpdatingPriority(true);
     try {
       const request: UpdateTicketRequest = { priority: newPriority };
-      const updatedTicket = await customerSupportApi.updateTicket(ticket.ticketId, request);
+      const { customerSupportApi } = await import('@/lib/api/customer-support-api');
+      const updatedTicket = await customerSupportApi.updateTicket(ticketId, request, isAgentView);
       onTicketUpdated(updatedTicket);
       toast.success('Ticket priority updated');
     } catch (error) {
@@ -151,7 +87,7 @@ export default function TicketDetailModal({
   };
 
   const formatDateTime = (dateString: string) => {
-    return format(new Date(dateString), 'MMM d, yyyy at h:mm a');
+    return format(new Date(dateString), 'dd MMM yyyy, HH:mm');
   };
 
   const canUpdateTicket = isAgentView && agentId && 
@@ -164,14 +100,14 @@ export default function TicketDetailModal({
           <DialogTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <MessageSquare className="w-5 h-5" />
-              Ticket #{ticket.ticketId}
+              Ticket 
             </div>
             <div className="flex items-center gap-2">
               <Badge className={getStatusColor(ticket.status)}>
                 {formatStatus(ticket.status)}
               </Badge>
-              <Badge className={getPriorityColor(ticket.priority)}>
-                {formatPriority(ticket.priority)}
+              <Badge className={getPriorityColor(ticketPriority)}>
+                {formatPriority(ticketPriority)}
               </Badge>
             </div>
           </DialogTitle>
@@ -182,14 +118,14 @@ export default function TicketDetailModal({
           <div className="flex-1 flex flex-col min-w-0">
             {/* Ticket Header */}
             <div className="mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">
+              <h2 className="text-xl font-semibold text-foreground mb-2">
                 {ticket.title}
               </h2>
-              <p className="text-gray-600 mb-4">
+              <p className="text-muted-foreground mb-4">
                 {ticket.description}
               </p>
               
-              <div className="flex items-center gap-4 text-sm text-gray-500 mb-4">
+              <div className="flex items-center gap-4 text-sm text-muted-foreground mb-4">
                 <div className="flex items-center gap-1">
                   <Calendar className="w-4 h-4" />
                   Created {getRelativeTime(ticket.createdAt)}
@@ -205,7 +141,7 @@ export default function TicketDetailModal({
 
               {ticket.tags && ticket.tags.length > 0 && (
                 <div className="flex items-center gap-2 mb-4">
-                  <Tag className="w-4 h-4 text-gray-400" />
+                  <Tag className="w-4 h-4 text-muted-foreground" />
                   <div className="flex flex-wrap gap-1">
                     {ticket.tags.map(tag => (
                       <Badge key={tag} variant="outline" className="text-xs">
@@ -219,91 +155,8 @@ export default function TicketDetailModal({
 
             <Separator className="mb-6" />
 
-            {/* Communications */}
-            <div className="flex-1 overflow-y-auto">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Communications ({communications.length})
-              </h3>
-              
-              {loading ? (
-                <div className="space-y-4">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="animate-pulse">
-                      <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
-                      <div className="h-16 bg-gray-200 rounded"></div>
-                    </div>
-                  ))}
-                </div>
-              ) : communications.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>No communications yet</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {communications.map((comm) => (
-                    <div 
-                      key={comm.communicationId} 
-                      className={`p-4 rounded-lg border ${
-                        comm.senderType === SenderType.AGENT 
-                          ? 'bg-blue-50 border-blue-200' 
-                          : comm.isInternal
-                          ? 'bg-yellow-50 border-yellow-200'
-                          : 'bg-gray-50 border-gray-200'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <MessageSquare className="w-4 h-4" />
-                          <span className="font-medium text-sm">
-                            {comm.senderDisplayName || comm.senderName || 'Unknown'}
-                          </span>
-                          <Badge variant="outline" className="text-xs">
-                            {comm.typeDisplayName || comm.communicationType}
-                          </Badge>
-                          {comm.isInternal && (
-                            <Badge variant="secondary" className="text-xs">
-                              Internal
-                            </Badge>
-                          )}
-                        </div>
-                        <span className="text-xs text-gray-500">
-                          {formatDateTime(comm.createdAt)}
-                        </span>
-                      </div>
-                      <p className="text-gray-700 whitespace-pre-wrap">
-                        {comm.content}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Message Input */}
-            <div className="mt-6 pt-4 border-t">
-              <form onSubmit={handleSendMessage}>
-                <Textarea
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder={
-                    isAgentView 
-                      ? "Type your response to the customer..."
-                      : "Type your message..."
-                  }
-                  rows={3}
-                  className="mb-3"
-                />
-                <div className="flex justify-between items-center">
-                  <div className="text-xs text-gray-500">
-                    {isAgentView && "Messages are visible to customers"}
-                  </div>
-                  <Button type="submit" disabled={isSubmitting || !newMessage.trim()}>
-                    <Send className="w-4 h-4 mr-2" />
-                    {isSubmitting ? 'Sending...' : 'Send Message'}
-                  </Button>
-                </div>
-              </form>
+            <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
+              Ticket communication is disabled. You can review ticket details here and use status or priority controls when available.
             </div>
           </div>
 
@@ -311,35 +164,35 @@ export default function TicketDetailModal({
           <div className="w-80 flex-shrink-0 space-y-6">
             {/* Ticket Details */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-900">Ticket Details</h3>
+              <h3 className="text-lg font-medium text-foreground">Ticket Details</h3>
               
               <div className="space-y-3 text-sm">
                 <div>
-                  <span className="text-gray-500">Category:</span>
-                  <div className="font-medium">{formatCategory(ticket.category)}</div>
+                  <span className="text-muted-foreground">Category:</span>
+                  <div className="font-medium text-foreground">{formatCategory(ticket.category)}</div>
                 </div>
                 
                 <div>
-                  <span className="text-gray-500">Created:</span>
-                  <div className="font-medium">{formatDateTime(ticket.createdAt)}</div>
+                  <span className="text-muted-foreground">Created:</span>
+                  <div className="font-medium text-foreground">{formatDateTime(ticket.createdAt)}</div>
                 </div>
                 
                 <div>
-                  <span className="text-gray-500">Last Updated:</span>
-                  <div className="font-medium">{formatDateTime(ticket.updatedAt)}</div>
+                  <span className="text-muted-foreground">Last Updated:</span>
+                  <div className="font-medium text-foreground">{formatDateTime(ticket.updatedAt)}</div>
                 </div>
                 
                 {ticket.assigneeId && (
                   <div>
-                    <span className="text-gray-500">Assigned To:</span>
-                    <div className="font-medium">Agent #{ticket.assigneeId}</div>
+                    <span className="text-muted-foreground">Assigned To:</span>
+                    <div className="font-medium text-foreground">Agent #{ticket.assigneeId}</div>
                   </div>
                 )}
                 
                 {ticket.errorLogs && (
                   <div>
-                    <span className="text-gray-500">Error Logs:</span>
-                    <div className="font-medium text-xs bg-gray-100 p-2 rounded mt-1 whitespace-pre-wrap">
+                    <span className="text-muted-foreground">Error Logs:</span>
+                    <div className="font-medium text-xs bg-muted p-2 rounded mt-1 whitespace-pre-wrap text-foreground">
                       {ticket.errorLogs}
                     </div>
                   </div>
@@ -350,11 +203,11 @@ export default function TicketDetailModal({
             {/* Agent Controls */}
             {canUpdateTicket && (
               <div className="space-y-4">
-                <h3 className="text-lg font-medium text-gray-900">Quick Actions</h3>
+                <h3 className="text-lg font-medium text-foreground">Quick Actions</h3>
                 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-sm text-gray-500 mb-1 block">Status</label>
+                    <label className="text-sm text-muted-foreground mb-1 block">Status</label>
                     <Select
                       value={ticket.status}
                       onValueChange={(value) => handleStatusUpdate(value as TicketStatus)}
@@ -376,9 +229,9 @@ export default function TicketDetailModal({
                   </div>
                   
                   <div>
-                    <label className="text-sm text-gray-500 mb-1 block">Priority</label>
+                    <label className="text-sm text-muted-foreground mb-1 block">Priority</label>
                     <Select
-                      value={ticket.priority}
+                      value={ticketPriority}
                       onValueChange={(value) => handlePriorityUpdate(value as TicketPriority)}
                       disabled={updatingPriority}
                     >

@@ -9,6 +9,8 @@ const supportApiClient = new BaseApiClient({
 // API Types
 export interface CreateTicketRequest {
   userId: string;
+  userEmail?: string;
+  userName?: string;
   title: string;
   description: string;
   category: TicketCategory;
@@ -25,6 +27,8 @@ export interface UpdateTicketRequest {
   status?: TicketStatus;
   category?: TicketCategory;
   assigneeId?: number;
+  assigneeName?: string;
+  assigneeEmail?: string;
   tags?: string[];
   errorLogs?: string;
   attachments?: string[];
@@ -41,6 +45,11 @@ export interface CreateCommunicationRequest {
   content: string;
   isInternal?: boolean;
   attachments?: string[];
+  attachmentSent?: boolean;
+  senderType: SenderType;
+  senderId: string;
+  senderName?: string;
+  senderEmail?: string;
 }
 
 export interface TicketFilter {
@@ -116,6 +125,18 @@ export interface Ticket {
   tags?: string[];
   attachments?: string[];
   assigneeId?: number;
+  customerEmail?: string;
+  customerName?: string;
+  assignedAgentName?: string;
+  assignedAgentEmail?: string;
+  communicationCount?: number;
+  customerUnreadCount?: number;
+  agentUnreadCount?: number;
+  hasUnreadMessages?: boolean;
+  lastCommunicationAt?: string;
+  notificationRecipientEmail?: string;
+  notificationRecipientName?: string;
+  notificationSubject?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -129,6 +150,7 @@ export interface Communication {
   content: string;
   isInternal: boolean;
   attachments?: string[];
+  attachmentSent?: boolean;
   createdAt: string;
   readAt?: string;
   emailMessageId?: string;
@@ -139,6 +161,9 @@ export interface Communication {
   isRead?: boolean;
   formattedCreatedAt?: string;
   formattedDuration?: string;
+  notificationRecipientEmail?: string;
+  notificationRecipientName?: string;
+  notificationSubject?: string;
 }
 
 export interface SupportAgent {
@@ -209,21 +234,29 @@ export const customerSupportApi = {
     return response;
   },
 
-  async getTickets(_filter: TicketFilter = {}, _page = 0, _size = 20): Promise<PaginatedResponse<Ticket>> {
-    // Intentionally call base endpoint without query params or payload
+  async getTickets(filter: TicketFilter = {}, page = 0, size = 20): Promise<PaginatedResponse<Ticket>> {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      size: size.toString(),
+    });
+
+    if (filter.userId) params.set('customerId', filter.userId);
+    if (filter.agentId) params.set('assigneeId', filter.agentId);
+    if (filter.status) params.set('status', filter.status);
+
     const response = await supportApiClient.get<PaginatedResponse<Ticket>>(
-      `${SUPPORT_API_BASE}/tickets`
+      `${SUPPORT_API_BASE}/tickets?${params}`
     );
     return response;
   },
 
-  async getTicket(ticketId: string): Promise<Ticket> {
-    const response = await supportApiClient.get<Ticket>(`${SUPPORT_API_BASE}/tickets/${ticketId}`);
+  async getTicket(ticketId: string, agentView = false): Promise<Ticket> {
+    const response = await supportApiClient.get<Ticket>(`${SUPPORT_API_BASE}/tickets/${ticketId}?agentView=${agentView}`);
     return response;
   },
 
-  async updateTicket(ticketId: string, request: UpdateTicketRequest): Promise<Ticket> {
-    const response = await supportApiClient.put<Ticket>(`${SUPPORT_API_BASE}/tickets/${ticketId}`, request);
+  async updateTicket(ticketId: string, request: UpdateTicketRequest, agentView = false): Promise<Ticket> {
+    const response = await supportApiClient.put<Ticket>(`${SUPPORT_API_BASE}/tickets/${ticketId}?agentView=${agentView}`, request);
     return response;
   },
 
@@ -246,11 +279,15 @@ export const customerSupportApi = {
     return response;
   },
 
-  async getMyTickets(statuses?: TicketStatus[], page = 0, size = 20): Promise<PaginatedResponse<Ticket>> {
+  async getMyTickets(statuses?: TicketStatus[], page = 0, size = 20, userId?: string): Promise<PaginatedResponse<Ticket>> {
     const params = new URLSearchParams({
       page: page.toString(),
       size: size.toString()
     });
+
+    if (userId) {
+      params.set('userId', userId);
+    }
     
     if (statuses && statuses.length > 0) {
       statuses.forEach(status => params.append('statuses', status));
@@ -275,10 +312,11 @@ export const customerSupportApi = {
     return response;
   },
 
-  async getTicketStats(startDate?: string, endDate?: string): Promise<TicketStats> {
+  async getTicketStats(startDate?: string, endDate?: string, userId?: string): Promise<TicketStats> {
     const params = new URLSearchParams();
     if (startDate) params.append('startDate', startDate);
     if (endDate) params.append('endDate', endDate);
+    if (userId) params.append('userId', userId);
     
     const response = await supportApiClient.get<TicketStats>(
       `${SUPPORT_API_BASE}/tickets/stats?${params}`
@@ -302,8 +340,8 @@ export const customerSupportApi = {
     return response;
   },
 
-  async markCommunicationAsRead(communicationId: number): Promise<void> {
-    await supportApiClient.post(`${SUPPORT_API_BASE}/communications/${communicationId}/read`);
+  async markCommunicationAsRead(communicationId: number, viewerType: SenderType): Promise<void> {
+    await supportApiClient.post(`${SUPPORT_API_BASE}/tickets/communications/${communicationId}/read?viewerType=${viewerType}`);
   },
 
   // Agent Management
@@ -360,8 +398,6 @@ export const formatStatus = (status: TicketStatus): string => {
     [TicketStatus.NEW]: 'New',
     [TicketStatus.ASSIGNED]: 'Assigned',
     [TicketStatus.IN_PROGRESS]: 'In Progress',
-    [TicketStatus.PENDING_USER]: 'Pending User',
-    [TicketStatus.PENDING_INTERNAL]: 'Pending Internal',
     [TicketStatus.ESCALATED]: 'Escalated',
     [TicketStatus.RESOLVED]: 'Resolved',
     [TicketStatus.CLOSED]: 'Closed',
@@ -404,8 +440,6 @@ export const getStatusColor = (status: TicketStatus): string => {
     [TicketStatus.NEW]: 'text-blue-600 bg-blue-50',
     [TicketStatus.ASSIGNED]: 'text-purple-600 bg-purple-50',
     [TicketStatus.IN_PROGRESS]: 'text-yellow-600 bg-yellow-50',
-    [TicketStatus.PENDING_USER]: 'text-orange-600 bg-orange-50',
-    [TicketStatus.PENDING_INTERNAL]: 'text-orange-600 bg-orange-50',
     [TicketStatus.ESCALATED]: 'text-red-600 bg-red-50',
     [TicketStatus.RESOLVED]: 'text-green-600 bg-green-50',
     [TicketStatus.CLOSED]: 'text-gray-600 bg-gray-50',

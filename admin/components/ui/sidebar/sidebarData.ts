@@ -19,19 +19,25 @@ export const mainSidebarItems: SidebarItemType[] = [
     id: "market",
     name: "Market",
     icon: "solar:chart-line-duotone",
-    url: "/marketplace",
-  },
-  {
-    id: "ticketing",
-    name: "Ticketing",
-    icon:  "solar:ticket-line-duotone",
-    url: "/ticketing",
+    url: "/trades",
   },
   {
     id: "support",
-    name: "Support",
+    name: "Support Team",
     icon: "solar:help-line-duotone",
     url: "/support",
+  },
+    {
+    id: "Ticketing",
+    name: "Ticketing",
+    icon: "solar:ticket-line-duotone",
+      url: "/ticketing",
+  },
+  {
+    id: "system-health",
+    name: "System Monitoring",
+    icon: "solar:shield-check-line-duotone",
+    url: "/system-health",
   },
 ];
 

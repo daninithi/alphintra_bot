@@ -69,7 +69,7 @@ app = FastAPI(title="Alphintra Trading Service", version="1.0.0")
 JWT_SECRET = os.getenv("JWT_SECRET", "zEseNVzJiNEFsxOKygzayk4hHjSp2UJMzHMwSjWWfqE=")
 
 # Database Configuration (Fixed: Use trading database instead of wallet database)
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_trading")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_trading")
 
 # CORS handled by API Gateway - do not add CORS middleware here
 # app.add_middleware(CORSMiddleware, ...) - DISABLED
@@ -193,7 +193,7 @@ def get_available_balance(user_id: int = None) -> float:
     
     try:
         # Connect to wallet database
-        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_wallet")
         conn = psycopg2.connect(wallet_db_url)
         cur = conn.cursor()
         
@@ -224,7 +224,7 @@ def get_available_balance(user_id: int = None) -> float:
 def update_wallet_balance(user_id: int, currency: str, amount_change: float) -> bool:
     """Update balance in wallet service database after trade execution."""
     try:
-        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_wallet")
         conn = psycopg2.connect(wallet_db_url)
         cur = conn.cursor()
         
@@ -278,7 +278,7 @@ def check_wallet_connection(user_id: int) -> dict:
     """Check if user has an active wallet connection in wallet service"""
     try:
         # Connect to wallet database (not trading database)
-        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+        wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_wallet")
         conn = psycopg2.connect(wallet_db_url)
         cur = conn.cursor()
         

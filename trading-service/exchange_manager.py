@@ -155,7 +155,7 @@ class ExchangeManager:
             self.logger.info(f"Fetching credentials from wallet database for user {self.user_id}...")
             
             # Connect to wallet database
-            wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet")
+            wallet_db_url = os.getenv("WALLET_DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_wallet")
             conn = psycopg2.connect(wallet_db_url)
             cur = conn.cursor()
             

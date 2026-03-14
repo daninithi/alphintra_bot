@@ -84,7 +84,7 @@ const AdminAuthPage: React.FC = () => {
     try {
       if (isLogin) {
         console.log('[Admin Login] Starting login process for:', formData.email);
-        
+
         const response = await authServiceApiClient.login({
           email: formData.email,
           password: formData.password
@@ -272,7 +272,7 @@ const AdminAuthPage: React.FC = () => {
               name="email"
               value={formData.email}
               onChange={handleInputChange}
-              placeholder={isLogin ? 'admin@alphintra.com' : 'your.email@example.com'}
+              placeholder={isLogin ? 'Enter your email' : 'your.email@example.com'}
               error={errors.email}
               Icon={Mail}
             />

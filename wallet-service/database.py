@@ -7,7 +7,7 @@ from models import Base
 # Use 'postgres' for Docker, 'localhost' for local development
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
-    "postgresql://alphintra:alphintra123@localhost:5432/alphintra_wallet"
+    "postgresql://myapp:alphintra123@localhost:5432/alphintra_wallet"
 )
 
 # Create engine

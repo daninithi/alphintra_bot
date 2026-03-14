@@ -23,6 +23,10 @@ public class UpdateTicketRequest {
 
     private Long assigneeId;
 
+    private String assigneeName;
+
+    private String assigneeEmail;
+
     private List<String> tags;
 
     private String errorLogs;

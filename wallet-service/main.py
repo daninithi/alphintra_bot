@@ -32,10 +32,18 @@ def encrypt_credential(credential: str) -> bytes:
     """Encrypt a credential string."""
     return cipher_suite.encrypt(credential.encode())
 
-def decrypt_credential(encrypted_credential: bytes) -> str:
+def decrypt_credential(encrypted_credential: bytes | str) -> str:
     """Decrypt an encrypted credential."""
     if isinstance(encrypted_credential, str):
-        encrypted_credential = encrypted_credential.encode()
+        # If it's a hex string from database, convert to bytes
+        try:
+            # Try to decode as hex first (PostgreSQL bytea format)
+            if encrypted_credential.startswith('\\x'):
+                encrypted_credential = bytes.fromhex(encrypted_credential[2:])
+            else:
+                encrypted_credential = encrypted_credential.encode()
+        except Exception:
+            encrypted_credential = encrypted_credential.encode()
     return cipher_suite.decrypt(encrypted_credential).decode()
 
 #
@@ -105,6 +113,9 @@ class Balance(BaseModel):
 
 class ConnectionResponse(BaseModel):
     connected: bool
+    status: Optional[str] = None
+    environment: Optional[str] = None
+    message: Optional[str] = None
 
 
 SUPPORTED_ENVIRONMENTS = {
@@ -255,20 +266,28 @@ async def connect_to_binance(
             logger.warning("Unexpected error validating Binance credentials: %s", validation_error)
             connection.connection_status = 'connected'
             connection.last_error = str(validation_error)
-        finally:
-            try:
-                await exchange.close()
-            except Exception:
-                pass
 
         db.commit()
         db.refresh(connection)
         print(f"DEBUG: Connection stored successfully with ID: {connection.uuid}")
 
         # Fetch and store initial balances after successful connection
+        # Create a fresh exchange instance for balance fetch
+        balance_exchange = ccxt.binance({
+            'apiKey': request.apiKey,
+            'secret': request.secretKey,
+            'enableRateLimit': True,
+            'timeout': 30000,
+        })
+        
         try:
             print("DEBUG: Fetching initial balances...")
-            balance_data = await exchange.fetch_balance()
+            if normalized_env == "testnet":
+                balance_exchange.set_sandbox_mode(True)
+            else:
+                balance_exchange.set_sandbox_mode(False)
+                
+            balance_data = await balance_exchange.fetch_balance()
             totals = balance_data.get('total', {}) if isinstance(balance_data, dict) else {}
             
             # Define relevant coins to track
@@ -305,6 +324,12 @@ async def connect_to_binance(
         except Exception as balance_error:
             print(f"DEBUG: Could not fetch initial balance: {balance_error}")
             # Don't fail connection if balance fetch fails
+        finally:
+            try:
+                await balance_exchange.close()
+                await exchange.close()
+            except Exception:
+                pass
 
         success_message = "Successfully connected to Binance"
         if connection.last_error:
@@ -434,11 +459,20 @@ async def get_balances(
 
         # Decrypt stored credentials
         try:
+            print(f"DEBUG: Encrypted API key type: {type(connection.encrypted_api_key)}")
+            print(f"DEBUG: Encrypted secret key type: {type(connection.encrypted_secret_key)}")
             api_key = decrypt_credential(connection.encrypted_api_key)
             secret_key = decrypt_credential(connection.encrypted_secret_key)
+            print(f"DEBUG: Decryption successful, key length: {len(api_key)}")
         except Exception as decrypt_error:
             logger.error(f"Failed to decrypt credentials: {decrypt_error}")
-            raise HTTPException(status_code=500, detail="Failed to decrypt stored credentials")
+            import traceback
+            print(f"DEBUG: Decryption error traceback: {traceback.format_exc()}")
+            # If decryption fails, the connection needs to be re-established
+            raise HTTPException(
+                status_code=401, 
+                detail="Stored credentials are invalid. Please disconnect and reconnect your wallet."
+            )
         
         exchange = ccxt.binance({
             'apiKey': api_key,
