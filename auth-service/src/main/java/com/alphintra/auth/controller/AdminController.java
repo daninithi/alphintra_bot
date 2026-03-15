@@ -13,8 +13,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PathVariable;
+
+import java.util.List;
 
 import com.alphintra.auth.dto.AuthResponse;
+import com.alphintra.auth.dto.AdminManagedUserResponse;
 import com.alphintra.auth.dto.ChangePasswordRequest;
 import com.alphintra.auth.dto.CreateUser;
 import com.alphintra.auth.dto.DeleteAccountRequest;
@@ -30,16 +34,15 @@ public class AdminController {
 
     @Autowired
     private AdminService adminService;
-    
+
     @Autowired
     private JwtUtil jwtUtil;
 
     @GetMapping("/f/health")
     public ResponseEntity<Map<String, String>> health() {
         return ResponseEntity.ok(Map.of(
-            "status", "healthy",
-            "service", "admin-auth-service"
-        ));
+                "status", "healthy",
+                "service", "admin-auth-service"));
     }
 
     @GetMapping("/f/exists")
@@ -55,8 +58,7 @@ public class AdminController {
             return ResponseEntity.status(HttpStatus.CREATED).body(response);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of(
-                "error", e.getMessage()
-            ));
+                    "error", e.getMessage()));
         }
     }
 
@@ -67,11 +69,10 @@ public class AdminController {
             return ResponseEntity.ok(response);
         } catch (RuntimeException e) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of(
-                "error", e.getMessage()
-            ));
+                    "error", e.getMessage()));
         }
     }
-    
+
     @PutMapping("/password")
     public ResponseEntity<?> changePassword(
             @RequestHeader("Authorization") String authHeader,
@@ -80,30 +81,72 @@ public class AdminController {
             // Extract token from Bearer header
             String token = authHeader.substring(7);
             String email = jwtUtil.extractEmail(token);
-            
+
             adminService.changePassword(email, request);
             return ResponseEntity.ok(Map.of(
-                "message", "Password changed successfully"
-            ));
+                    "message", "Password changed successfully"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of(
-                "error", e.getMessage()
-            ));
+                    "error", e.getMessage()));
         }
     }
-    
+
     @DeleteMapping("/account")
     public ResponseEntity<?> deleteAccount(
             @Valid @RequestBody DeleteAccountRequest request) {
         try {
             adminService.deleteAccount(request);
             return ResponseEntity.ok(Map.of(
-                "message", "Account deleted successfully"
-            ));
+                    "message", "Account deleted successfully"));
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of(
-                "error", e.getMessage()
-            ));
+                    "error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/users")
+    public ResponseEntity<List<AdminManagedUserResponse>> getManagedUsers() {
+        return ResponseEntity.ok(adminService.getManagedUsers());
+    }
+
+    @GetMapping("/users/{userId}")
+    public ResponseEntity<?> getManagedUserById(@PathVariable Long userId) {
+        try {
+            return ResponseEntity.ok(adminService.getManagedUserById(userId));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/users/{userId}/suspend")
+    public ResponseEntity<?> suspendManagedUser(@PathVariable Long userId) {
+        try {
+            return ResponseEntity.ok(adminService.suspendManagedUser(userId));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/users/{userId}/unsuspend")
+    public ResponseEntity<?> unsuspendManagedUser(@PathVariable Long userId) {
+        try {
+            return ResponseEntity.ok(adminService.unsuspendManagedUser(userId));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/users/{userId}")
+    public ResponseEntity<?> deleteManagedUser(@PathVariable Long userId) {
+        try {
+            adminService.deleteManagedUser(userId);
+            return ResponseEntity.ok(Map.of("message", "User deleted successfully"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", e.getMessage()));
         }
     }
 }

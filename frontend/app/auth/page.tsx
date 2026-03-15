@@ -94,7 +94,7 @@ const AuthPage: React.FC = () => {
           console.log('[Login] Login successful:', { userId: response.user.id, email: response.user.email });
         } catch (loginError: any) {
           console.error('[Login] Auth service error:', loginError);
-          const errorMsg = loginError.response?.data?.message || loginError.message || 'Login failed. Please check your credentials.';
+          const errorMsg = loginError.response?.data?.message || loginError.response?.data?.error || loginError.message || 'Login failed. Please check your credentials.';
           setMessage({ type: 'error', text: errorMsg });
           setIsLoading(false);
           return;

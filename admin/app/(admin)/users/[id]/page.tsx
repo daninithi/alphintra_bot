@@ -126,6 +126,22 @@ export default function UserDetailsPage() {
     }
   };
 
+  const handleUnsuspend = async () => {
+    if (!user) return;
+    setActionLoading(true);
+    setMessage("");
+    setError("");
+    try {
+      const updated = await authServiceApiClient.unsuspendManagedUser(user.id);
+      setUser(updated);
+      setMessage("Account reactivated.");
+    } catch (err: any) {
+      setError(err?.response?.data?.error || "Failed to unsuspend account.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!user) return;
     if (!window.confirm("Are you sure you want to delete this account?")) {
@@ -287,9 +303,23 @@ export default function UserDetailsPage() {
       <section className="rounded-lg border border-border bg-card p-5">
         <h2 className="text-xl font-semibold mb-4">Actions</h2>
         <div className="flex flex-wrap gap-3">
-          <button disabled={actionLoading || loadingUser} onClick={handleSuspend} className="rounded-md bg-yellow-500 px-4 py-2 text-black font-medium hover:bg-yellow-600 disabled:opacity-50">
-            Suspend account
-          </button>
+          {user?.accountStatus === 'SUSPENDED' ? (
+            <button 
+              disabled={actionLoading || loadingUser} 
+              onClick={handleUnsuspend} 
+              className="rounded-md bg-green-600 px-4 py-2 text-white font-medium hover:bg-green-700 disabled:opacity-50"
+            >
+              Unsuspend account
+            </button>
+          ) : (
+            <button 
+              disabled={actionLoading || loadingUser} 
+              onClick={handleSuspend} 
+              className="rounded-md bg-yellow-500 px-4 py-2 text-black font-medium hover:bg-yellow-600 disabled:opacity-50"
+            >
+              Suspend account
+            </button>
+          )}
           <button disabled={actionLoading || loadingUser} onClick={handleDelete} className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50">
             Delete account
           </button>

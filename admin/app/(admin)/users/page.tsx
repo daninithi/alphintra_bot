@@ -9,10 +9,10 @@ import { AdminManagedUser, authServiceApiClient } from "@/lib/api/auth-service-a
 const statusClassMap: Record<string, string> = {
   ACTIVE: "text-green-600 dark:text-green-400",
   SUSPENDED: "text-yellow-600 dark:text-yellow-400",
-  BANNED: "text-red-600 dark:text-red-400",
+  DELETED: "text-red-600 dark:text-red-400",
 };
 
-const accountStatuses = ["ALL", "ACTIVE", "SUSPENDED", "BANNED"] as const;
+const accountStatuses = ["ALL", "ACTIVE", "SUSPENDED", "DELETED"] as const;
 
 const displayStatus = (status: string) => status.charAt(0) + status.slice(1).toLowerCase();
 
