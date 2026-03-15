@@ -6,16 +6,16 @@ Creates tables and inserts default strategies
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
-from dotenv import load_dotenv
+# from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# # Load environment variables
+# load_dotenv()
 
 # Database configuration
 DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_NAME = os.getenv("DB_NAME", "alphintra_auth")  # Strategies stored in auth database
 DB_USER = os.getenv("DB_USER", "myapp")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "alphintra123")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "123456789")
 DB_PORT = os.getenv("DB_PORT", "5432")
 
 def get_connection():

@@ -95,7 +95,8 @@ const VerifyEmailPage = () => {
       if (isDuplicate) {
         clearPendingSignup();
         setStatus('error');
-        setMessage('Email already registered. Please sign in instead.');
+        // Show the actual server message which may indicate deleted account
+        setMessage(serverMsg || 'Email already registered. Please sign in instead.');
       } else if (!error?.response && error?.message === 'Network Error') {
         setStatus('error');
         setMessage('Cannot reach the server. Please make sure the backend is running and try again.');
@@ -179,9 +180,8 @@ const VerifyEmailPage = () => {
 
         {message && (
           <p
-            className={`text-sm text-center ${
-              status === 'success' ? 'text-green-300' : 'text-red-300'
-            }`}
+            className={`text-sm text-center ${status === 'success' ? 'text-green-300' : 'text-red-300'
+              }`}
           >
             {message}
           </p>

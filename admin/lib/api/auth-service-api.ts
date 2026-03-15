@@ -62,6 +62,28 @@ export interface ChangePasswordResponse {
   message: string;
 }
 
+export interface AdminManagedUser {
+  id: number;
+  name: string;
+  email: string;
+  accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
+  createdDate: string;
+}
+
+export interface UserStrategyInfo {
+  strategy_id: string;
+  name: string;
+  type: string;
+  access_type: string;
+  bot_status: string;
+  last_run?: string;
+}
+
+export interface LoginHistoryRecord {
+  id: string | number;
+  loginAt: string;
+}
+
 export class AuthServiceApiClient {
   private api: ReturnType<typeof axios.create>;
 
@@ -194,6 +216,41 @@ export class AuthServiceApiClient {
       url: '/auth/admin/account',
       data: request
     });
+    return response.data;
+  }
+
+  async getManagedUsers(): Promise<AdminManagedUser[]> {
+    const response = await this.api.get<AdminManagedUser[]>('/auth/admin/users');
+    return response.data;
+  }
+
+  async getManagedUserById(userId: number): Promise<AdminManagedUser> {
+    const response = await this.api.get<AdminManagedUser>(`/auth/admin/users/${userId}`);
+    return response.data;
+  }
+
+  async suspendManagedUser(userId: number): Promise<AdminManagedUser> {
+    const response = await this.api.put<AdminManagedUser>(`/auth/admin/users/${userId}/suspend`);
+    return response.data;
+  }
+
+  async unsuspendManagedUser(userId: number): Promise<AdminManagedUser> {
+    const response = await this.api.put<AdminManagedUser>(`/auth/admin/users/${userId}/unsuspend`);
+    return response.data;
+  }
+
+  async deleteManagedUser(userId: number): Promise<{ message: string }> {
+    const response = await this.api.delete<{ message: string }>(`/auth/admin/users/${userId}`);
+    return response.data;
+  }
+
+  async getUserStrategies(userId: number): Promise<UserStrategyInfo[]> {
+    const response = await this.api.get<UserStrategyInfo[]>(`/trading/strategies/users/${userId}`);
+    return response.data;
+  }
+
+  async getUserLoginHistory(userId: number): Promise<LoginHistoryRecord[]> {
+    const response = await this.api.get<LoginHistoryRecord[]>(`/auth/admin/users/${userId}/login-history`);
     return response.data;
   }
 }

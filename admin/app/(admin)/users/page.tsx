@@ -9,8 +9,10 @@ import { AdminManagedUser, authServiceApiClient } from "@/lib/api/auth-service-a
 const statusClassMap: Record<string, string> = {
   ACTIVE: "text-green-600 dark:text-green-400",
   SUSPENDED: "text-yellow-600 dark:text-yellow-400",
-  BANNED: "text-red-600 dark:text-red-400",
+  DELETED: "text-red-600 dark:text-red-400",
 };
+
+const accountStatuses = ["ALL", "ACTIVE", "SUSPENDED", "DELETED"] as const;
 
 const displayStatus = (status: string) => status.charAt(0) + status.slice(1).toLowerCase();
 
@@ -19,6 +21,10 @@ export default function UsersPage() {
   const [users, setUsers] = useState<AdminManagedUser[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [userIdFilter, setUserIdFilter] = useState("");
+  const [nameFilter, setNameFilter] = useState("");
+  const [emailFilter, setEmailFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<(typeof accountStatuses)[number]>("ALL");
   const router = useRouter();
   const { isLoading, isAuthenticated } = useAuth();
 
@@ -51,6 +57,32 @@ export default function UsersPage() {
     }
   }, [mounted, isAuthenticated]);
 
+  const resetFilters = () => {
+    setUserIdFilter("");
+    setNameFilter("");
+    setEmailFilter("");
+    setStatusFilter("ALL");
+  };
+
+  const normalizedUserIdFilter = userIdFilter.trim().toLowerCase();
+  const normalizedNameFilter = nameFilter.trim().toLowerCase();
+  const normalizedEmailFilter = emailFilter.trim().toLowerCase();
+
+  const filteredUsers = users.filter((user) => {
+    const matchesUserId = normalizedUserIdFilter === "" || user.id.toString().toLowerCase().includes(normalizedUserIdFilter);
+    const matchesName = normalizedNameFilter === "" || (user.name || "").toLowerCase().includes(normalizedNameFilter);
+    const matchesEmail = normalizedEmailFilter === "" || user.email.toLowerCase().includes(normalizedEmailFilter);
+    const matchesStatus = statusFilter === "ALL" || user.accountStatus === statusFilter;
+
+    return matchesUserId && matchesName && matchesEmail && matchesStatus;
+  });
+
+  const hasActiveFilters =
+    userIdFilter.trim() !== "" ||
+    nameFilter.trim() !== "" ||
+    emailFilter.trim() !== "" ||
+    statusFilter !== "ALL";
+
   if (!mounted || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -81,6 +113,73 @@ export default function UsersPage() {
         </button>
       </div>
 
+      <div className="rounded-lg border border-border bg-card p-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-foreground">User ID</span>
+            <input
+              type="text"
+              value={userIdFilter}
+              onChange={(event) => setUserIdFilter(event.target.value)}
+              placeholder="Search by user ID"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-foreground">Name</span>
+            <input
+              type="text"
+              value={nameFilter}
+              onChange={(event) => setNameFilter(event.target.value)}
+              placeholder="Search by name"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-foreground">Email</span>
+            <input
+              type="text"
+              value={emailFilter}
+              onChange={(event) => setEmailFilter(event.target.value)}
+              placeholder="Search by email"
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary"
+            />
+          </label>
+
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-foreground">Account Status</span>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as (typeof accountStatuses)[number])}
+              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition focus:border-primary"
+            >
+              {accountStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {status === "ALL" ? "All statuses" : displayStatus(status)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="flex items-end gap-3">
+            <button
+              type="button"
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
+              className="w-full rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Clear filters
+            </button>
+          </div>
+        </div>
+
+        <p className="mt-4 text-sm text-muted-foreground">
+          Showing {filteredUsers.length} of {users.length} users
+        </p>
+      </div>
+
       <div className="rounded-lg border border-border bg-card overflow-x-auto">
         <table className="w-full min-w-[980px] text-sm">
           <thead className="bg-muted/40">
@@ -94,7 +193,7 @@ export default function UsersPage() {
             </tr>
           </thead>
           <tbody>
-            {users.map((user) => (
+            {filteredUsers.map((user) => (
               <tr key={user.id} className="border-t border-border">
                 <td className="px-4 py-3">{user.id}</td>
                 <td className="px-4 py-3">{user.name || "-"}</td>
@@ -113,10 +212,10 @@ export default function UsersPage() {
                 </td>
               </tr>
             ))}
-            {!loadingUsers && users.length === 0 && (
+            {!loadingUsers && filteredUsers.length === 0 && (
               <tr>
                 <td className="px-4 py-6 text-center text-muted-foreground" colSpan={7}>
-                  No users found.
+                  {users.length === 0 ? "No users found." : "No users match the current filters."}
                 </td>
               </tr>
             )}
