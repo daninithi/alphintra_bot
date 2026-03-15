@@ -18,6 +18,8 @@ export interface Strategy {
   price: number;
   author_id?: number;
   total_purchases: number;
+  publish_status?: 'private' | 'pending_review' | 'approved' | 'rejected';
+  reject_reason?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -117,6 +119,64 @@ class TradingStrategyAPI {
     );
 
     return response.data.data.content;
+  }
+
+  /**
+   * Get all user strategies pending admin review
+   */
+  async getPendingReviewStrategies(): Promise<Strategy[]> {
+    const response = await axios.get(
+      `${TRADING_SERVICE_URL}/api/admin/strategies/pending-review`,
+      { headers: this.getHeaders() }
+    );
+    return response.data.data;
+  }
+
+  /**
+   * Download a strategy file for manual testing
+   */
+  getStrategyDownloadUrl(strategyId: string): string {
+    const token = getToken();
+    return `${TRADING_SERVICE_URL}/api/admin/strategies/${strategyId}/download`;
+  }
+
+  async downloadStrategyFile(strategyId: string, fileName: string): Promise<void> {
+    const response = await axios.get(
+      `${TRADING_SERVICE_URL}/api/admin/strategies/${strategyId}/download`,
+      { headers: this.getHeaders(), responseType: 'blob' }
+    );
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', fileName || `strategy_${strategyId}.py`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Approve a pending strategy (publishes to marketplace)
+   */
+  async approveStrategy(strategyId: string): Promise<void> {
+    await axios.post(
+      `${TRADING_SERVICE_URL}/api/admin/strategies/${strategyId}/approve`,
+      {},
+      { headers: this.getHeaders() }
+    );
+  }
+
+  /**
+   * Reject a pending strategy with a reason
+   */
+  async rejectStrategy(strategyId: string, reason: string): Promise<void> {
+    const formData = new FormData();
+    formData.append('reason', reason);
+    await axios.post(
+      `${TRADING_SERVICE_URL}/api/admin/strategies/${strategyId}/reject`,
+      formData,
+      { headers: this.getHeaders() }
+    );
   }
 }
 

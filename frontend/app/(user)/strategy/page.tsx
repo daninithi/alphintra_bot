@@ -1,66 +1,62 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Plus, ShoppingCart, User, ChevronRight, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Upload, Loader2, ShoppingCart, ChevronRight, CheckCircle2, Plus, User } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { fetchMyStrategies, MyStrategySummary } from "@/lib/api/myStrategies";
 import { fetchBoughtStrategies } from "@/app/api/strategyApi";
 import { Strategy as BoughtStrategy } from "@/components/marketplace/types";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
+import { getUserImportedStrategies, UserStrategy } from "@/lib/api/user-strategy-api";
+import UserStrategyImportModal from "@/components/strategies/UserStrategyImportModal";
+import UserImportedStrategies from "@/components/strategies/UserImportedStrategies";
+import UpgradeModal from "@/components/subscription/UpgradeModal";
+import { getSubscriptionStatus } from "@/lib/api/subscription-api";
 
 export default function Strategy() {
   const { user, isLoading: authLoading } = useAuth();
   const [mounted, setMounted] = useState(false);
-  const [myStrategies, setMyStrategies] = useState<MyStrategySummary[]>([]);
-  const [loadingStrategies, setLoadingStrategies] = useState(true);
-  const [strategiesError, setStrategiesError] = useState<string | null>(null);
-
   const [boughtStrategies, setBoughtStrategies] = useState<BoughtStrategy[]>([]);
   const [loadingBought, setLoadingBought] = useState(true);
   const [boughtError, setBoughtError] = useState<string | null>(null);
 
+  const [importedStrategies, setImportedStrategies] = useState<UserStrategy[]>([]);
+  const [loadingImported, setLoadingImported] = useState(true);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState<"import" | "purchase" | "publish" | null>(null);
+
   const router = useRouter();
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  const handleCreateStrategy = () => {
-    router.push("/strategy-hub");
-  };
-
-  useEffect(() => {
-    if (!mounted) return;
-
-    setLoadingStrategies(true);
-    fetchMyStrategies()
-      .then((data) => {
-        setMyStrategies(data);
-        setStrategiesError(null);
-      })
-      .catch((err) => {
-        console.error("Failed to load strategies", err);
-        setStrategiesError(err.message ?? "Failed to load strategies");
-      })
-      .finally(() => setLoadingStrategies(false));
-  }, [mounted]);
+  useEffect(() => { setMounted(true); }, []);
 
   useEffect(() => {
     if (!mounted || !user) return;
-
     setLoadingBought(true);
     fetchBoughtStrategies(Number(user.id))
-      .then((strategies) => {
-        setBoughtStrategies(strategies);
-        setBoughtError(null);
-      })
-      .catch((err) => {
-        console.error("Failed to load purchased strategies", err);
-        setBoughtError(err.message ?? "Failed to load purchased strategies");
-      })
+      .then((strategies) => { setBoughtStrategies(strategies); setBoughtError(null); })
+      .catch((err) => { setBoughtError(err.message ?? "Failed to load purchased strategies"); })
       .finally(() => setLoadingBought(false));
   }, [mounted, user]);
+
+  const loadImported = useCallback(() => {
+    setLoadingImported(true);
+    getUserImportedStrategies()
+      .then(setImportedStrategies)
+      .catch(() => setImportedStrategies([]))
+      .finally(() => setLoadingImported(false));
+  }, []);
+
+  useEffect(() => { if (mounted) loadImported(); }, [mounted, loadImported]);
+
+  const handleImportClick = async () => {
+    const FREE_LIMIT = 2;
+    const status = await getSubscriptionStatus(Number(user?.id));
+    if (!status.isSubscribed && importedStrategies.length >= FREE_LIMIT) {
+      setUpgradeReason("import");
+    } else {
+      setShowImportModal(true);
+    }
+  };
 
   if (!mounted) return null;
 
@@ -75,17 +71,30 @@ export default function Strategy() {
             </p>
           </div>
 
-          <Button
-            onClick={handleCreateStrategy}
-            className="bg-yellow-500 hover:bg-yellow-600 text-black"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create Strategy
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleImportClick}
+              variant="outline"
+              className="border-yellow-500/40 text-yellow-500 hover:bg-yellow-500/10"
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Import Strategy
+            </Button>
+
+            {/* <Button
+              onClick={handleCreateStrategy}
+              className="bg-yellow-500 hover:bg-yellow-600 tex              lsof -i :8790 | grep LISTENt-black"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Strategy
+            </Button> */}
+          </div>
         </div>
 
+
+
         <div className="grid gap-6 xl:grid-cols-2">
-          <section className="rounded-2xl border bg-card text-card-foreground shadow-sm">
+          {/* <section className="rounded-2xl border bg-card text-card-foreground shadow-sm">
             <div className="flex items-center justify-between border-b px-6 py-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10">
@@ -137,7 +146,6 @@ export default function Strategy() {
                             </p>
                           </div>
                         </div>
-
                         <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                       </div>
                     </div>
@@ -145,7 +153,43 @@ export default function Strategy() {
                 </div>
               )}
             </div>
-          </section>
+          </section> */}
+
+        {/* ── Imported Strategies (py file import) ── */}
+        <section className="rounded-2xl border bg-card text-card-foreground shadow-sm">
+          <div className="flex items-center justify-between border-b px-6 py-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-yellow-500/10">
+                <Upload className="w-5 h-5 text-yellow-500" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">My Imported Strategies</h2>
+                <p className="text-sm text-muted-foreground">
+                  Strategies you imported from Python files
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                {importedStrategies.length}
+              </div>
+  
+            </div>
+          </div>
+          <div className="p-6">
+            {loadingImported ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Loading imported strategies...
+              </div>
+            ) : (
+              <UserImportedStrategies
+                strategies={importedStrategies}
+                onRefresh={loadImported}
+              />
+            )}
+          </div>
+        </section>
 
           <section className="rounded-2xl border bg-card text-card-foreground shadow-sm">
             <div className="flex items-center justify-between border-b px-6 py-5">
@@ -160,25 +204,13 @@ export default function Strategy() {
                   </p>
                 </div>
               </div>
-
               <div className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
                 {boughtStrategies.length}
               </div>
             </div>
 
             <div className="p-6">
-              {authLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Loading user...
-                </div>
-              ) : !user ? (
-                <div className="rounded-xl border border-dashed p-8 text-center">
-                  <p className="text-sm text-muted-foreground">
-                    Please log in to view purchased strategies.
-                  </p>
-                </div>
-              ) : loadingBought ? (
+              {authLoading || loadingBought ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="w-4 h-4 animate-spin" />
                   Loading purchases...
@@ -188,13 +220,14 @@ export default function Strategy() {
                   {boughtError}
                 </div>
               ) : boughtStrategies.length === 0 ? (
-                <div className="rounded-xl border border-dashed p-8 text-center">
+                <div className="rounded-xl border border-dashed border-border py-12 text-center">
+                  <ShoppingCart className="w-8 h-8 mx-auto mb-3 text-muted-foreground opacity-50" />
                   <p className="text-sm text-muted-foreground">
                     You haven&apos;t purchased any strategies yet.
                   </p>
                 </div>
               ) : (
-                <div className="grid gap-4">
+                <div className="space-y-3">
                   {boughtStrategies.map((strategy) => {
                     const price =
                       strategy.price === "free" ? "Free" : `$${strategy.price}`;
@@ -202,28 +235,27 @@ export default function Strategy() {
                     return (
                       <div
                         key={String(strategy.strategyId ?? strategy.id)}
-                        className="group rounded-2xl border bg-background p-4 transition-all hover:shadow-md"
+                        className="rounded-xl border border-border bg-card p-4 hover:border-green-500/30 transition-colors"
                       >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex items-start gap-4">
-                            <div className="mt-1 h-3 w-3 rounded-full bg-purple-500" />
-                            <div className="space-y-1">
-                              <h3 className="font-semibold">{strategy.name}</h3>
-                              <p className="text-sm text-muted-foreground">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-green-500/10">
+                              <ShoppingCart className="w-4 h-4 text-green-500" />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm truncate">{strategy.name}</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
                                 {strategy.category} • {strategy.type}
                               </p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs text-muted-foreground mt-0.5">
                                 {price} • Subscribers: {strategy.subscriberCount}
                               </p>
                             </div>
                           </div>
-
-                          <div className="flex flex-col items-end gap-2">
-                            <span className="rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-600">
-                              Purchased
-                            </span>
-                            <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                          </div>
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2.5 py-0.5 text-xs font-medium text-green-600">
+                            <CheckCircle2 className="w-3 h-3" />
+                            Purchased
+                          </span>
                         </div>
                       </div>
                     );
@@ -234,6 +266,21 @@ export default function Strategy() {
           </section>
         </div>
       </div>
+
+      {showImportModal && (
+        <UserStrategyImportModal
+          onSuccess={loadImported}
+          onClose={() => setShowImportModal(false)}
+        />
+      )}
+
+      {upgradeReason && (
+        <UpgradeModal
+          reason={upgradeReason}
+          onClose={() => setUpgradeReason(null)}
+        />
+      )}
     </div>
   );
 }
+

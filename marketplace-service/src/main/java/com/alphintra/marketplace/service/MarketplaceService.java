@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import com.alphintra.marketplace.entity.Strategy;
@@ -16,13 +17,18 @@ import com.stripe.param.checkout.SessionCreateParams;
 @Service
 public class MarketplaceService {
 
+    private static final int FREE_PURCHASE_LIMIT = 2;
+
     private final StrategyRepository strategyRepository;
     private final UserStrategyRepository userStrategyRepository;
+    private final JdbcTemplate jdbcTemplate;
 
     public MarketplaceService(StrategyRepository strategyRepository,
-                              UserStrategyRepository userStrategyRepository) {
+                              UserStrategyRepository userStrategyRepository,
+                              JdbcTemplate jdbcTemplate) {
         this.strategyRepository = strategyRepository;
         this.userStrategyRepository = userStrategyRepository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public List<Strategy> getMarketplaceStrategies() {
@@ -37,6 +43,23 @@ public class MarketplaceService {
                 .ifPresent(existing -> {
                     throw new RuntimeException("Strategy already purchased");
                 });
+
+        // Check purchase limit for free users
+        String subscriptionStatus = jdbcTemplate.queryForObject(
+                "SELECT COALESCE(subscription_status, 'free') FROM users WHERE id = ?",
+                String.class, userId);
+        java.sql.Timestamp endDate = jdbcTemplate.queryForObject(
+                "SELECT subscription_end_date FROM users WHERE id = ?",
+                java.sql.Timestamp.class, userId);
+        boolean isSubscribed = "active".equals(subscriptionStatus)
+                && (endDate == null || endDate.toLocalDateTime().isAfter(LocalDateTime.now()));
+
+        if (!isSubscribed) {
+            int purchaseCount = userStrategyRepository.findByUserIdAndAccessType(userId, "purchased").size();
+            if (purchaseCount >= FREE_PURCHASE_LIMIT) {
+                throw new RuntimeException("SUBSCRIPTION_REQUIRED: Free users can purchase up to " + FREE_PURCHASE_LIMIT + " strategies. Upgrade to Pro for unlimited purchases.");
+            }
+        }
 
         UserStrategy userStrategy = new UserStrategy();
         userStrategy.setUserId(userId);

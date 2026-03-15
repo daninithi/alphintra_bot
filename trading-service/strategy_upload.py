@@ -16,6 +16,7 @@ logger = setup_logger("StrategyUpload", "INFO")
 # Configuration
 STRATEGIES_DIR = Path(__file__).parent / "strategies"
 MARKETPLACE_DIR = STRATEGIES_DIR / "marketplace"
+USER_CREATED_DIR = STRATEGIES_DIR / "user_created"
 MAX_FILE_SIZE = 1 * 1024 * 1024  # 1MB
 ALLOWED_EXTENSIONS = ['.py']
 
@@ -30,6 +31,7 @@ class StrategyUploadHandler:
     def ensure_directories(self):
         """Ensure required directories exist"""
         MARKETPLACE_DIR.mkdir(parents=True, exist_ok=True)
+        USER_CREATED_DIR.mkdir(parents=True, exist_ok=True)
         logger.info(f"Strategy directories ready: {STRATEGIES_DIR}")
     
     def validate_file(self, file_content: bytes, filename: str) -> Tuple[bool, Optional[str]]:
@@ -149,7 +151,8 @@ class StrategyUploadHandler:
         self,
         file_content: bytes,
         filename: str,
-        is_paid: bool
+        is_paid: bool,
+        is_user_created: bool = False
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Save strategy file to appropriate directory
@@ -158,6 +161,7 @@ class StrategyUploadHandler:
             file_content: File content in bytes
             filename: Original filename
             is_paid: Whether this is a paid strategy
+            is_user_created: Whether uploaded by a user (goes to user_created/)
         
         Returns:
             Tuple of (success, file_path, error_message)
@@ -166,8 +170,13 @@ class StrategyUploadHandler:
             # Sanitize filename
             safe_filename = self.sanitize_filename(filename)
             
-            # Make filename unique by adding timestamp if it exists
-            target_dir = MARKETPLACE_DIR if is_paid else STRATEGIES_DIR
+            # Determine target directory
+            if is_user_created:
+                target_dir = USER_CREATED_DIR
+            elif is_paid:
+                target_dir = MARKETPLACE_DIR
+            else:
+                target_dir = STRATEGIES_DIR
             target_path = target_dir / safe_filename
             
             if target_path.exists():

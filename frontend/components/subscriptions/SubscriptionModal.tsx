@@ -10,7 +10,7 @@ import {
   SubscriptionFAQ 
 } from '@/components/subscriptions';
 import type { SubscriptionPlan } from '@/components/subscriptions';
-import { Card, CardContent } from '@/components/ui/no-code/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useRouter } from 'next/navigation';

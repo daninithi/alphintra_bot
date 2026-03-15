@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { tradingStrategyAPI, Strategy } from "@/lib/api/trading-strategy-api";
 import StrategyUploadForm from "@/components/strategies/StrategyUploadForm";
+import PendingReviewStrategies from "@/components/strategies/PendingReviewStrategies";
 
 export default function StrategiesPage() {
   const [mounted, setMounted] = useState(false);
@@ -12,13 +13,18 @@ export default function StrategiesPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<"strategies" | "pending">("strategies");
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [editingStrategy, setEditingStrategy] = useState<Strategy | null>(null);
   const [viewingContent, setViewingContent] = useState<{ id: string; content: string } | null>(null);
+
+  const [pendingStrategies, setPendingStrategies] = useState<Strategy[]>([]);
+  const [loadingPending, setLoadingPending] = useState(false);
+
   const router = useRouter();
   const { isLoading, isAuthenticated } = useAuth();
 
-  const loadStrategies = async () => {
+  const loadStrategies = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
@@ -30,7 +36,19 @@ export default function StrategiesPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
+
+  const loadPendingStrategies = useCallback(async () => {
+    setLoadingPending(true);
+    try {
+      const data = await tradingStrategyAPI.getPendingReviewStrategies();
+      setPendingStrategies(data);
+    } catch {
+      setPendingStrategies([]);
+    } finally {
+      setLoadingPending(false);
+    }
+  }, []);
 
   const handleDelete = async (strategyId: string) => {
     if (!confirm("Are you sure you want to delete this strategy? This action cannot be undone.")) {
@@ -67,6 +85,7 @@ export default function StrategiesPage() {
   useEffect(() => {
     if (mounted && isAuthenticated) {
       loadStrategies();
+      loadPendingStrategies();
     }
   }, [mounted, isAuthenticated, filter]);
 
@@ -144,7 +163,7 @@ export default function StrategiesPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
           <div className="text-sm text-gray-500 dark:text-gray-400">Total Strategies</div>
           <div className="text-3xl font-bold text-gray-900 dark:text-white">{stats.total}</div>
@@ -157,8 +176,66 @@ export default function StrategiesPage() {
           <div className="text-sm text-gray-500 dark:text-gray-400">Paid Strategies</div>
           <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{stats.paid}</div>
         </div>
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div className="text-sm text-gray-500 dark:text-gray-400">Pending Review</div>
+          <div className="text-3xl font-bold text-yellow-500">{pendingStrategies.length}</div>
+        </div>
       </div>
 
+      {/* Top-level Tabs */}
+      <div className="flex gap-2 mb-6 border-b border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setActiveTab("strategies")}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "strategies"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          }`}
+        >
+          All Strategies
+        </button>
+        <button
+          onClick={() => setActiveTab("pending")}
+          className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === "pending"
+              ? "border-yellow-500 text-yellow-500"
+              : "border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+          }`}
+        >
+          Pending Review
+          {pendingStrategies.length > 0 && (
+            <span className="rounded-full bg-yellow-500 text-white text-xs font-bold px-2 py-0.5">
+              {pendingStrategies.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Pending Review Tab */}
+      {activeTab === "pending" && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+              User Publish Requests
+            </h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Download and test each strategy manually before approving or rejecting.
+            </p>
+          </div>
+          {loadingPending ? (
+            <div className="text-sm text-gray-500 dark:text-gray-400">Loading...</div>
+          ) : (
+            <PendingReviewStrategies
+              strategies={pendingStrategies}
+              onRefresh={loadPendingStrategies}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Strategies Tab */}
+      {activeTab === "strategies" && (
+        <>
       {/* Actions and Filters */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center space-y-4 md:space-y-0">
@@ -298,6 +375,8 @@ export default function StrategiesPage() {
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }
