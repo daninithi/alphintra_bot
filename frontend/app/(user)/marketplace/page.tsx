@@ -4,20 +4,20 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search, SlidersHorizontal } from "lucide-react";
 import { fetchStrategies } from "@/app/api/strategyApi";
 import StrategyGrid from "@/components/marketplace/StrategyGrid";
 import { Strategy } from "@/components/marketplace/types";
 
-type FilterType = "all" | "default" | "marketplace";
+type SortType = "price-high" | "price-low" | "name-asc" | "name-desc";
 
 export default function MarketplacePage() {
   const router = useRouter();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selectedFilter, setSelectedFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
+  const [sortBy, setSortBy] = useState<SortType>("price-high");
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
 
   useEffect(() => {
@@ -39,38 +39,58 @@ export default function MarketplacePage() {
   }, []);
 
   const filteredStrategies = useMemo(() => {
-    let data = [...strategies];
-
-    if (selectedFilter !== "all") {
-      data = data.filter((strategy) => strategy.type === selectedFilter);
-    }
+    let data = strategies.filter(
+      (strategy) =>
+        strategy.type === "marketplace" &&
+        strategy.price !== "free" &&
+        Number(strategy.price) > 0
+    );
 
     const query = search.trim().toLowerCase();
 
     if (query) {
       data = data.filter((strategy) => {
-        const name = strategy.name?.toLowerCase() || "";
-        const description = strategy.description?.toLowerCase() || "";
-        const creator = strategy.creator?.toLowerCase() || "";
-        const category = strategy.category?.toLowerCase() || "";
-        const type = strategy.type?.toLowerCase() || "";
+        const searchableText = [
+          strategy.name,
+          strategy.description,
+          strategy.creator,
+          strategy.creatorName,
+          strategy.category,
+          strategy.type,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
 
-        return (
-          name.includes(query) ||
-          description.includes(query) ||
-          creator.includes(query) ||
-          category.includes(query) ||
-          type.includes(query)
-        );
+        return searchableText.includes(query);
       });
     }
 
-    return data;
-  }, [strategies, selectedFilter, search]);
+    data.sort((a, b) => {
+      if (sortBy === "price-high") {
+        return Number(b.price) - Number(a.price);
+      }
 
-  const totalStrategies = strategies.length;
-  const freeStrategies = strategies.filter((s) => s.price === "free").length;
-  const paidStrategies = strategies.filter((s) => s.price !== "free").length;
+      if (sortBy === "price-low") {
+        return Number(a.price) - Number(b.price);
+      }
+
+      if (sortBy === "name-asc") {
+        return (a.name || "").localeCompare(b.name || "");
+      }
+
+      if (sortBy === "name-desc") {
+        return (b.name || "").localeCompare(a.name || "");
+      }
+
+      return 0;
+    });
+
+    return data;
+  }, [strategies, search, sortBy]);
+
+  const visibleStrategiesCount = filteredStrategies.length;
+  const premiumStrategiesCount = filteredStrategies.length;
 
   const handleBuyNow = (strategy: Strategy) => {
     const strategyId = strategy.strategyId || strategy.id;
@@ -97,76 +117,59 @@ export default function MarketplacePage() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <main className="flex-1 p-6 pt-0 space-y-6">
-        <div className="pt-6 space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">Marketplace</h1>
-          <p className="text-muted-foreground max-w-2xl">
-            Browse built-in and premium trading strategies. Compare options,
-            explore details, and choose strategies that match your style.
-          </p>
+        <div className="pt-6 space-y-4">
+          <div className="rounded-2xl border bg-card text-card-foreground shadow-sm p-6 md:p-8">
+            <div className="space-y-3">
+              <p className="inline-flex rounded-full border px-3 py-1 text-xs font-medium text-muted-foreground">
+                Alphintra Marketplace
+              </p>
+              <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
+                Premium Trading Strategies
+              </h1>
+            </div>
+          </div>
+
+
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-            <p className="text-sm text-muted-foreground">Total Strategies</p>
-            <p className="mt-2 text-3xl font-semibold">{totalStrategies}</p>
+        <div className="rounded-2xl border bg-card text-card-foreground shadow-sm p-4 md:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="relative w-full lg:max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by strategy name, creator, or description"
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <SlidersHorizontal className="h-4 w-4" />
+                <span>Sort by</span>
+              </div>
+
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortType)}
+                className="h-10 min-w-[220px] rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background focus:border-yellow-500"
+              >
+                <option value="price-high">Price: High to Low</option>
+                <option value="price-low">Price: Low to High</option>
+                <option value="name-asc">Alphabetical: A to Z</option>
+                <option value="name-desc">Alphabetical: Z to A</option>
+              </select>
+            </div>
           </div>
 
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-            <p className="text-sm text-muted-foreground">Free Strategies</p>
-            <p className="mt-2 text-3xl font-semibold">{freeStrategies}</p>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              {search.trim() && (
+              <span className="rounded-full bg-yellow-500/15 px-3 py-1 text-yellow-700 dark:text-yellow-400">
+                Search: {search}
+              </span>
+            )}
           </div>
-
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-5">
-            <p className="text-sm text-muted-foreground">Premium Strategies</p>
-            <p className="mt-2 text-3xl font-semibold">{paidStrategies}</p>
-          </div>
-        </div>
-
-        <div className="p-4 flex justify-between items-center gap-4 flex-wrap rounded-xl border bg-card text-card-foreground shadow-sm">
-          <div className="flex gap-2 flex-wrap">
-            <Button
-              variant={selectedFilter === "all" ? "default" : "outline"}
-              className={
-                selectedFilter === "all"
-                  ? "bg-yellow-500 hover:bg-yellow-600 text-black"
-                  : ""
-              }
-              onClick={() => setSelectedFilter("all")}
-            >
-              All
-            </Button>
-
-            <Button
-              variant={selectedFilter === "default" ? "default" : "outline"}
-              className={
-                selectedFilter === "default"
-                  ? "bg-yellow-500 hover:bg-yellow-600 text-black"
-                  : ""
-              }
-              onClick={() => setSelectedFilter("default")}
-            >
-              Default
-            </Button>
-
-            <Button
-              variant={selectedFilter === "marketplace" ? "default" : "outline"}
-              className={
-                selectedFilter === "marketplace"
-                  ? "bg-yellow-500 hover:bg-yellow-600 text-black"
-                  : ""
-              }
-              onClick={() => setSelectedFilter("marketplace")}
-            >
-              Marketplace
-            </Button>
-          </div>
-
-          <Input
-            placeholder="Search strategies..."
-            className="w-full sm:w-72"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
         </div>
 
         {error && (
@@ -178,9 +181,9 @@ export default function MarketplacePage() {
 
         {!error && filteredStrategies.length === 0 && (
           <div className="rounded-xl border bg-card text-card-foreground shadow-sm p-10 text-center">
-            <p className="text-lg font-medium">No strategies found</p>
+            <p className="text-lg font-medium">No marketplace strategies found</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              Try changing your search or filter.
+              Try changing your search or sorting.
             </p>
           </div>
         )}
@@ -212,10 +215,12 @@ export default function MarketplacePage() {
               </Button>
             </div>
 
-            <div className="mt-6 grid gap-4 md:grid-cols-4">
+            <div className="mt-6 grid gap-4 md:grid-cols-3">
               <div className="rounded-xl border bg-background p-4">
                 <p className="text-sm text-muted-foreground">Creator</p>
-                <p className="mt-1 font-medium">{selectedStrategy.creator}</p>
+                <p className="mt-1 font-medium">
+                  {selectedStrategy.creatorName || selectedStrategy.creator}
+                </p>
               </div>
 
               <div className="rounded-xl border bg-background p-4">
@@ -224,17 +229,8 @@ export default function MarketplacePage() {
               </div>
 
               <div className="rounded-xl border bg-background p-4">
-                <p className="text-sm text-muted-foreground">Risk</p>
-                <p className="mt-1 font-medium capitalize">{selectedStrategy.riskLevel}</p>
-              </div>
-
-              <div className="rounded-xl border bg-background p-4">
                 <p className="text-sm text-muted-foreground">Price</p>
-                <p className="mt-1 font-medium">
-                  {selectedStrategy.price === "free"
-                    ? "Free"
-                    : `$${selectedStrategy.price}`}
-                </p>
+                <p className="mt-1 font-medium">${selectedStrategy.price}</p>
               </div>
             </div>
 
@@ -243,7 +239,7 @@ export default function MarketplacePage() {
                 onClick={() => handleBuyNow(selectedStrategy)}
                 className="bg-yellow-500 hover:bg-yellow-600 text-black"
               >
-                {selectedStrategy.price === "free" ? "Get Now" : "Buy Now"}
+                Buy Now
               </Button>
             </div>
           </div>

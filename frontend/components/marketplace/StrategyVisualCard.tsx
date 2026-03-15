@@ -88,27 +88,18 @@ export default function StrategyVisualCard({
           </Badge>
         </div>
 
-        <div className="flex items-center justify-between text-xs mb-3">
-          <div className="flex items-center gap-1">
-            <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
-            <span className="text-gray-700 dark:text-gray-300">
-              {strategy.rating} ({strategy.reviewCount})
-            </span>
-          </div>
+        <div className="flex items-center justify-end text-xs mb-3">
           <div className="flex items-center gap-1">
             <Users className="h-3 w-3 text-gray-400 dark:text-gray-500" />
             <span className="text-gray-600 dark:text-gray-400">{strategy.subscriberCount}</span>
-          </div>
+         </div>
         </div>
 
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-sm font-medium text-gray-900 dark:text-white">
-            {strategy.performance.totalReturn}% Return
-          </span>
-          <span className="text-sm font-medium text-gray-700 dark:text-gray-800 bg-yellow-300 px-2 py-1 rounded-lg">
-            {isFree ? 'Free' : `$${strategy.price}`}
-          </span>
-        </div>
+        <div className="flex items-center justify-end mb-3">
+         <span className="text-sm font-medium text-gray-700 dark:text-gray-800 bg-yellow-300 px-2 py-1 rounded-lg">
+           {isFree ? 'Free' : `$${strategy.price}`}
+  </span>
+</div>
 
         <Button
           type="button"
