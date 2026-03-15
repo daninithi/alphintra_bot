@@ -15,6 +15,12 @@ export const mainSidebarItems: SidebarItemType[] = [
     icon: "solar:user-line-duotone",
     url: "/users",
   },
+  {
+    id: "strategies",
+    name: "Strategies",
+    icon: "solar:target-line-duotone",
+    url: "/strategies",
+  },
     {
     id: "market",
     name: "Market",
