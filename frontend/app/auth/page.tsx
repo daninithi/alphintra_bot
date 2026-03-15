@@ -77,7 +77,7 @@ const AuthPage: React.FC = () => {
     try {
       if (isLogin) {
         console.log('[Login] Starting login process for:', formData.email);
-        
+
         // Login via auth service
         let response;
         try {
@@ -86,7 +86,7 @@ const AuthPage: React.FC = () => {
             password: formData.password
           });
           console.log('[Login] Raw response:', response);
-          
+
           // Handle backend response format (user object)
           if (!response || !response.token || !response.user) {
             throw new Error('Invalid response from server - missing token or user');
@@ -128,13 +128,13 @@ const AuthPage: React.FC = () => {
             createdAt: response.user.created_at,
             updatedAt: response.user.updated_at
           };
-          
+
           await login(response.token, authUser);
           console.log('[Login] Auth context updated');
         } catch (contextError) {
           console.error('[Login] Failed to update auth context:', contextError);
         }
-        
+
         // Check wallet connection status (non-blocking)
         try {
           const walletResponse = await fetch('http://localhost:8790/wallet/binance/connection-status', {
@@ -143,7 +143,7 @@ const AuthPage: React.FC = () => {
               'Content-Type': 'application/json'
             }
           });
-          
+
           if (walletResponse.ok) {
             const walletData = await walletResponse.json();
             console.log('[Login] Wallet status:', walletData);
@@ -160,7 +160,7 @@ const AuthPage: React.FC = () => {
               'Content-Type': 'application/json'
             }
           });
-          
+
           if (botResponse.ok) {
             const botData = await botResponse.json();
             console.log('[Login] Bot status:', botData);
@@ -168,9 +168,9 @@ const AuthPage: React.FC = () => {
         } catch (botError) {
           console.log('[Login] Bot check skipped:', botError);
         }
-        
+
         setMessage({ type: 'success', text: 'Login successful! Welcome to trading!' });
-        
+
         // Redirect based on user role
         console.log('[Login] Redirecting user...');
         setTimeout(() => {
@@ -284,29 +284,26 @@ const AuthPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsLogin(true)}
-              className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${
-                isLogin ? 'bg-yellow-500 text-black shadow-lg' : 'text-gray-300 hover:text-white'
-              }`}
+              className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${isLogin ? 'bg-yellow-500 text-black shadow-lg' : 'text-gray-300 hover:text-white'
+                }`}
             >
               Sign In
             </button>
             <button
               type="button"
               onClick={() => setIsLogin(false)}
-              className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${
-                !isLogin ? 'bg-yellow-500 text-black shadow-lg' : 'text-gray-300 hover:text-white'
-              }`}
+              className={`flex-1 py-3 text-sm font-medium rounded-lg transition-all duration-200 ${!isLogin ? 'bg-yellow-500 text-black shadow-lg' : 'text-gray-300 hover:text-white'
+                }`}
             >
               Sign Up
             </button>
           </div>
           {message && (
             <div
-              className={`p-4 mb-6 rounded-xl text-sm font-medium ${
-                message.type === 'success'
+              className={`p-4 mb-6 rounded-xl text-sm font-medium ${message.type === 'success'
                   ? 'bg-green-500/20 text-green-200 border border-green-400/50'
                   : 'bg-red-500/20 text-red-200 border border-red-400/50'
-              }`}
+                }`}
             >
               {message.text}
             </div>

@@ -195,10 +195,6 @@ export default function UserDetailsPage() {
             <p className="font-medium">{user ? displayStatus(user.accountStatus) : "-"}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Email Verified</p>
-            <p className="font-medium">{user?.emailVerified ? "Yes" : "No"}</p>
-          </div>
-          <div>
             <p className="text-muted-foreground">Created Date</p>
             <p className="font-medium">{user ? new Date(user.createdDate).toLocaleString() : "-"}</p>
           </div>

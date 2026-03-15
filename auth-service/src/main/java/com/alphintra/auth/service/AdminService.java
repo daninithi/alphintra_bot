@@ -1,6 +1,7 @@
 package com.alphintra.auth.service;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -11,11 +12,14 @@ import com.alphintra.auth.dto.AdminManagedUserResponse;
 import com.alphintra.auth.dto.ChangePasswordRequest;
 import com.alphintra.auth.dto.CreateUser;
 import com.alphintra.auth.dto.DeleteAccountRequest;
+import com.alphintra.auth.dto.LoginHistoryResponse;
 import com.alphintra.auth.dto.LoginRequest;
 import com.alphintra.auth.model.Admin;
+import com.alphintra.auth.model.LoginHistory;
 import com.alphintra.auth.model.User;
 import com.alphintra.auth.model.enums.AccountStatus;
 import com.alphintra.auth.repository.AdminRepository;
+import com.alphintra.auth.repository.LoginHistoryRepository;
 import com.alphintra.auth.repository.UserRepository;
 import com.alphintra.auth.util.JwtUtil;
 
@@ -34,6 +38,9 @@ public class AdminService {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private LoginHistoryRepository loginHistoryRepository;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -218,7 +225,13 @@ public class AdminService {
                 user.getUsername(),
                 user.getEmail(),
                 status,
-                Boolean.TRUE.equals(user.getEmailVerified()),
                 user.getCreatedAt());
+    }
+
+    public List<LoginHistoryResponse> getUserLoginHistory(Long userId) {
+        return loginHistoryRepository.findByUserIdOrderByLoginAtDesc(userId)
+                .stream()
+                .map(history -> new LoginHistoryResponse(history.getId(), history.getLoginAt()))
+                .collect(Collectors.toList());
     }
 }

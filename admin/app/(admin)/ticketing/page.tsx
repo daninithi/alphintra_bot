@@ -68,7 +68,6 @@ interface AdminUserProfile {
 	id: number;
 	name: string;
 	email: string;
-	emailVerified?: boolean;
 }
 
 interface AdminUserByIdResponse {
@@ -177,8 +176,8 @@ export default function AdminTicketingPage() {
 		const token = getToken();
 		return token
 			? {
-					Authorization: `Bearer ${token}`,
-				}
+				Authorization: `Bearer ${token}`,
+			}
 			: {};
 	};
 
@@ -460,25 +459,25 @@ export default function AdminTicketingPage() {
 				<section className="rounded-lg border border-border bg-card shadow-sm">
 					<div className="border-b border-border p-4 space-y-3">
 						<div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px]">
-						<input
-							type="text"
-							value={searchTerm}
-							onChange={(event) => setSearchTerm(event.target.value)}
-							placeholder="Search by ticket, title, customer"
-							className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-yellow-500"
-						/>
+							<input
+								type="text"
+								value={searchTerm}
+								onChange={(event) => setSearchTerm(event.target.value)}
+								placeholder="Search by ticket, title, customer"
+								className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-yellow-500"
+							/>
 
-						<select
-							value={statusFilter}
-							onChange={(event) => setStatusFilter(event.target.value as 'ALL' | TicketStatus)}
-							className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-yellow-500"
-						>
-							{STATUS_OPTIONS.map((option) => (
-								<option key={option} value={option}>
-									{option === 'ALL' ? 'All statuses' : formatEnum(option)}
-								</option>
-							))}
-						</select>
+							<select
+								value={statusFilter}
+								onChange={(event) => setStatusFilter(event.target.value as 'ALL' | TicketStatus)}
+								className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-yellow-500"
+							>
+								{STATUS_OPTIONS.map((option) => (
+									<option key={option} value={option}>
+										{option === 'ALL' ? 'All statuses' : formatEnum(option)}
+									</option>
+								))}
+							</select>
 						</div>
 
 						<div className="flex flex-wrap gap-2">
@@ -492,11 +491,10 @@ export default function AdminTicketingPage() {
 										key={option}
 										type="button"
 										onClick={() => setAssignmentFilter(option)}
-										className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
-											isActive
+										className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${isActive
 												? 'bg-yellow-500 text-white'
 												: 'bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'
-										}`}
+											}`}
 									>
 										{label}
 									</button>
@@ -523,9 +521,8 @@ export default function AdminTicketingPage() {
 										key={ticket.id}
 										type="button"
 										onClick={() => setSelectedTicketId(ticket.id)}
-										className={`w-full border-b border-border p-4 text-left transition-colors ${
-											isActive ? 'bg-yellow-50 dark:bg-yellow-900/10' : 'hover:bg-muted/40'
-										}`}
+										className={`w-full border-b border-border p-4 text-left transition-colors ${isActive ? 'bg-yellow-50 dark:bg-yellow-900/10' : 'hover:bg-muted/40'
+											}`}
 									>
 										<div className="flex items-start justify-between gap-3">
 											<div className="min-w-0 flex-1">

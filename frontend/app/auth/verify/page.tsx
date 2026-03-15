@@ -180,9 +180,8 @@ const VerifyEmailPage = () => {
 
         {message && (
           <p
-            className={`text-sm text-center ${
-              status === 'success' ? 'text-green-300' : 'text-red-300'
-            }`}
+            className={`text-sm text-center ${status === 'success' ? 'text-green-300' : 'text-red-300'
+              }`}
           >
             {message}
           </p>

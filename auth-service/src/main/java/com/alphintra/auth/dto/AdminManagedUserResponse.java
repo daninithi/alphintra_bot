@@ -14,6 +14,5 @@ public class AdminManagedUserResponse {
     private String name;
     private String email;
     private AccountStatus accountStatus;
-    private Boolean emailVerified;
     private LocalDateTime createdDate;
 }

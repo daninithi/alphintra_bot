@@ -5,8 +5,10 @@ import com.alphintra.auth.dto.ChangePasswordRequest;
 import com.alphintra.auth.dto.CreateUser;
 import com.alphintra.auth.dto.DeleteAccountRequest;
 import com.alphintra.auth.dto.LoginRequest;
+import com.alphintra.auth.model.LoginHistory;
 import com.alphintra.auth.model.User;
 import com.alphintra.auth.model.enums.AccountStatus;
+import com.alphintra.auth.repository.LoginHistoryRepository;
 import com.alphintra.auth.repository.UserRepository;
 import com.alphintra.auth.util.JwtUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +26,9 @@ public class AuthService {
     
     @Autowired
     private JwtUtil jwtUtil;
+    
+    @Autowired
+    private LoginHistoryRepository loginHistoryRepository;
     
     public AuthResponse register(CreateUser createUser) {
         // Check if user with this email exists (including deleted users)
@@ -77,6 +82,11 @@ public class AuthService {
         if (!passwordEncoder.matches(loginRequest.getPassword(), user.getPassword())) {
             throw new RuntimeException("Invalid email or password");
         }
+        
+        // Record login history
+        LoginHistory loginHistory = new LoginHistory();
+        loginHistory.setUserId(user.getId());
+        loginHistoryRepository.save(loginHistory);
         
         // Generate JWT token
         String token = jwtUtil.generateToken(

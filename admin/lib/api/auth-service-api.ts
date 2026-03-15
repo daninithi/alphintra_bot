@@ -66,8 +66,7 @@ export interface AdminManagedUser {
   id: number;
   name: string;
   email: string;
-  accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
-  emailVerified: boolean;
+  accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
   createdDate: string;
 }
 
