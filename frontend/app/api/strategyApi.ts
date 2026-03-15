@@ -1,7 +1,8 @@
 import { Strategy } from '@/components/marketplace/types';
+import { getToken } from '@/lib/auth';
 
 const MARKETPLACE_API_BASE =
-  process.env.NEXT_PUBLIC_MARKETPLACE_API_URL ?? 'http://localhost:8097';
+  process.env.NEXT_PUBLIC_GATEWAY_URL ?? 'http://localhost:8790';
 
 const STRATEGIES_API_URL = `${MARKETPLACE_API_BASE}/marketplace/strategies`;
 
@@ -44,10 +45,12 @@ function mapStrategy(strategy: any): Strategy {
 
 export async function fetchStrategies(): Promise<Strategy[]> {
   try {
+    const token = getToken();
     const response = await fetch(STRATEGIES_API_URL, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       cache: 'no-store',
     });
@@ -75,6 +78,7 @@ export async function fetchBoughtStrategies(userId: number): Promise<Strategy[]>
         method: 'GET',
         headers: {
           Accept: 'application/json',
+          ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
         },
         cache: 'no-store',
       }

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/no-code/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { HelpCircle, CheckCircle2, XCircle } from 'lucide-react';
 
 interface FAQ {

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS strategies (
     parameters JSONB,
     python_class VARCHAR(200),
     python_module VARCHAR(200),
+    strategy_file VARCHAR(500),
     price DECIMAL(10, 2) DEFAULT 0,
     author_id INTEGER,
     total_purchases INTEGER DEFAULT 0,

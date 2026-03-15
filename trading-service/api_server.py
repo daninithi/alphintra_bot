@@ -2,14 +2,14 @@
 HTTP API wrapper for the trading bot.
 Provides health checks and status endpoints.
 """
-from fastapi import FastAPI, HTTPException, Header, Depends
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException, Header, Depends, File, UploadFile, Form
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import uvicorn
 import threading
 import asyncio
 from datetime import datetime, timezone
+from pathlib import Path
 from config import Config
 import psycopg2
 import jwt
@@ -17,6 +17,7 @@ import base64
 import os
 from bot_models import BotExecution, Order, Position, TradeHistory, get_db, init_db
 from strategy_models import StrategyDB, Strategy
+from strategy_upload import StrategyUploadHandler
 import logging
 
 # Configure logging
@@ -71,8 +72,9 @@ JWT_SECRET = os.getenv("JWT_SECRET", "zEseNVzJiNEFsxOKygzayk4hHjSp2UJMzHMwSjWWfq
 # Database Configuration (Fixed: Use trading database instead of wallet database)
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://myapp:alphintra123@localhost:5432/alphintra_trading")
 
-# CORS handled by API Gateway - do not add CORS middleware here
-# app.add_middleware(CORSMiddleware, ...) - DISABLED
+# CORS is handled by the API Gateway. No direct browser access allowed.
+# Both admin and user frontend route through the gateway (port 8790).
+
 
 # Bot status
 bot_status = {
@@ -871,6 +873,577 @@ async def track_strategy_usage(strategy_id: str, user_id: int = Depends(get_curr
     except Exception as e:
         logger.error(f"Failed to track strategy usage: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to track usage: {str(e)}")
+
+
+# ============================================
+# Admin Strategy Management Endpoints
+# ============================================
+
+@app.post("/api/admin/strategies/upload")
+async def upload_strategy(
+    name: str = Form(...),
+    description: str = Form(...),
+    price: float = Form(...),
+    file: UploadFile = File(...),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Upload a new strategy file (Admin only)
+    
+    Args:
+        name: Strategy name
+        description: Strategy description
+        price: Strategy price (0 for free)
+        file: Python strategy file
+    """
+    try:
+        # Initialize handlers
+        upload_handler = StrategyUploadHandler()
+        strategy_db = StrategyDB()
+        
+        # Read file content
+        file_content = await file.read()
+        
+        # Validate file
+        is_valid, error_msg = upload_handler.validate_file(file_content, file.filename)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Extract class information
+        class_name, parent_class = upload_handler.extract_class_info(file_content)
+        if not class_name:
+            raise HTTPException(status_code=400, detail="Could not extract class name from file")
+        
+        # Validate that strategy inherits from BaseStrategy
+        if not parent_class or 'BaseStrategy' not in parent_class:
+            raise HTTPException(
+                status_code=400, 
+                detail="Strategy must inherit from BaseStrategy. Please ensure your strategy class extends BaseStrategy."
+            )
+        
+        # Determine strategy type based on price
+        is_paid = price > 0
+        strategy_type = "marketplace" if is_paid else "default"
+        
+        # Save file
+        success, file_path, error_msg = upload_handler.save_strategy_file(
+            file_content, file.filename, is_paid
+        )
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Failed to save file: {error_msg}")
+        
+        # Generate strategy ID
+        strategy_id = upload_handler.generate_strategy_id(name)
+        
+        # Get module path
+        module_path = upload_handler.get_module_path(file_path)
+        
+        # Create database record
+        success, error_msg = strategy_db.create_strategy(
+            strategy_id=strategy_id,
+            name=name,
+            description=description,
+            strategy_type=strategy_type,
+            price=price,
+            python_class=class_name,
+            python_module=module_path,
+            strategy_file=file_path,
+            author_id=user_id
+        )
+        
+        if not success:
+            # Rollback: delete file
+            upload_handler.delete_strategy_file(file_path)
+            raise HTTPException(status_code=500, detail=f"Failed to create strategy: {error_msg}")
+        
+        strategy_db.close()
+        
+        logger.info(f"Strategy uploaded successfully: {strategy_id}")
+        
+        return {
+            "status": "success",
+            "message": "Strategy uploaded successfully",
+            "data": {
+                "strategy_id": strategy_id,
+                "name": name,
+                "type": strategy_type,
+                "file_path": file_path,
+                "class_name": class_name,
+                "module_path": module_path
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to upload strategy: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@app.get("/api/admin/strategies")
+async def get_all_strategies_admin(
+    strategy_type: Optional[str] = None,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Get all strategies (Admin view)
+    
+    Args:
+        strategy_type: Optional filter ('default', 'marketplace', 'user_created')
+    """
+    try:
+        strategy_db = StrategyDB()
+        strategies = strategy_db.get_all_strategies_admin(strategy_type)
+        strategy_db.close()
+        
+        # Convert to dict for JSON response
+        strategies_data = [strategy.to_dict() for strategy in strategies]
+        
+        return {
+            "status": "success",
+            "data": strategies_data,
+            "count": len(strategies_data)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get strategies: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to fetch strategies: {str(e)}")
+
+
+@app.put("/api/admin/strategies/{strategy_id}")
+async def update_strategy(
+    strategy_id: str,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    price: Optional[float] = None,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Update strategy metadata (Admin only)
+    Does not update the strategy file
+    """
+    try:
+        strategy_db = StrategyDB()
+        
+        success, error_msg = strategy_db.update_strategy(
+            strategy_id=strategy_id,
+            name=name,
+            description=description,
+            price=price
+        )
+        
+        strategy_db.close()
+        
+        if not success:
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        return {
+            "status": "success",
+            "message": "Strategy updated successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update strategy: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
+
+
+@app.delete("/api/admin/strategies/{strategy_id}")
+async def delete_strategy(
+    strategy_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Delete a strategy (Admin only)
+    Deletes both database record and file
+    """
+    try:
+        strategy_db = StrategyDB()
+        upload_handler = StrategyUploadHandler()
+        
+        # Get strategy details to find file path
+        strategy = strategy_db.get_strategy_by_id(strategy_id)
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        
+        # Delete from database
+        success, error_msg = strategy_db.delete_strategy(strategy_id)
+        if not success:
+            raise HTTPException(status_code=400, detail=error_msg)
+        
+        # Delete file if it exists
+        if strategy.strategy_file:
+            upload_handler.delete_strategy_file(strategy.strategy_file)
+        
+        strategy_db.close()
+        
+        return {
+            "status": "success",
+            "message": "Strategy deleted successfully"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete strategy: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+
+@app.get("/api/admin/strategies/{strategy_id}/content")
+async def get_strategy_content(
+    strategy_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    Get the Python file content of a strategy (Admin only)
+    """
+    try:
+        strategy_db = StrategyDB()
+        upload_handler = StrategyUploadHandler()
+        
+        # Get strategy details
+        strategy = strategy_db.get_strategy_by_id(strategy_id)
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        
+        if not strategy.strategy_file:
+            raise HTTPException(status_code=404, detail="Strategy file not found")
+        
+        # Read file content
+        content = upload_handler.read_strategy_file(strategy.strategy_file)
+        if content is None:
+            raise HTTPException(status_code=404, detail="Could not read strategy file")
+        
+        strategy_db.close()
+        
+        return {
+            "status": "success",
+            "data": {
+                "strategy_id": strategy_id,
+                "file_path": strategy.strategy_file,
+                "content": content
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get strategy content: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+
+
+# ============================================
+# User Strategy Import Endpoints
+# ============================================
+
+@app.post("/api/user/strategies/upload")
+async def user_upload_strategy(
+    name: str = Form(...),
+    description: str = Form(...),
+    price: float = Form(0.0),
+    file: UploadFile = File(...),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    User uploads their own private strategy.
+    Strategy is saved as 'user_created' with publish_status='private'.
+    Immediately available for the user's own bots.
+    """
+    try:
+        upload_handler = StrategyUploadHandler()
+        strategy_db = StrategyDB()
+
+        # Enforce import limit for free users
+        FREE_IMPORT_LIMIT = 2
+        if not strategy_db.is_user_subscribed(user_id):
+            import_count = strategy_db.count_user_imported_strategies(user_id)
+            if import_count >= FREE_IMPORT_LIMIT:
+                raise HTTPException(
+                    status_code=402,
+                    detail="SUBSCRIPTION_REQUIRED: Free users can import up to 2 strategies. Upgrade to Pro for unlimited imports."
+                )
+
+        file_content = await file.read()
+
+        is_valid, error_msg = upload_handler.validate_file(file_content, file.filename)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        class_name, parent_class = upload_handler.extract_class_info(file_content)
+        if not class_name:
+            raise HTTPException(status_code=400, detail="Could not extract class name from file")
+
+        if not parent_class or 'BaseStrategy' not in parent_class:
+            raise HTTPException(
+                status_code=400,
+                detail="Strategy must inherit from BaseStrategy. Please ensure your class extends BaseStrategy."
+            )
+
+        success, file_path, error_msg = upload_handler.save_strategy_file(
+            file_content, file.filename, is_paid=False, is_user_created=True
+        )
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Failed to save file: {error_msg}")
+
+        strategy_id = upload_handler.generate_strategy_id(name)
+        module_path = upload_handler.get_module_path(file_path)
+
+        success, error_msg = strategy_db.create_user_strategy(
+            strategy_id=strategy_id,
+            name=name,
+            description=description,
+            price=price,
+            python_class=class_name,
+            python_module=module_path,
+            strategy_file=file_path,
+            author_id=user_id
+        )
+
+        if not success:
+            upload_handler.delete_strategy_file(file_path)
+            raise HTTPException(status_code=500, detail=f"Failed to create strategy: {error_msg}")
+
+        strategy_db.close()
+        logger.info(f"User {user_id} uploaded strategy: {strategy_id}")
+
+        return {
+            "status": "success",
+            "message": "Strategy imported successfully",
+            "data": {
+                "strategy_id": strategy_id,
+                "name": name,
+                "type": "user_created",
+                "publish_status": "private",
+                "class_name": class_name
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"User strategy upload failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@app.get("/api/user/strategies")
+async def get_user_imported_strategies(
+    user_id: int = Depends(get_current_user_id)
+):
+    """Get all strategies imported/created by the current user."""
+    try:
+        strategy_db = StrategyDB()
+        strategies = strategy_db.get_user_imported_strategies(user_id)
+        strategy_db.close()
+        return {
+            "status": "success",
+            "data": [s.to_dict() for s in strategies]
+        }
+    except Exception as e:
+        logger.error(f"Failed to get user strategies: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get strategies: {str(e)}")
+
+
+@app.delete("/api/user/strategies/{strategy_id}")
+async def delete_user_strategy(
+    strategy_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Delete a user's own imported strategy (private, rejected, or approved — not pending_review)."""
+    try:
+        strategy_db = StrategyDB()
+        strategy = strategy_db.get_strategy_by_id(strategy_id)
+
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        if strategy.author_id != user_id:
+            raise HTTPException(status_code=403, detail="You don't own this strategy")
+
+
+        upload_handler = StrategyUploadHandler()
+        success, error_msg = strategy_db.delete_strategy(strategy_id)
+        if not success:
+            raise HTTPException(status_code=500, detail=f"Failed to delete: {error_msg}")
+
+        if strategy.strategy_file:
+            upload_handler.delete_strategy_file(strategy.strategy_file)
+
+        strategy_db.close()
+        return {"status": "success", "message": "Strategy deleted"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete user strategy: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
+
+@app.get("/api/user/strategies/{strategy_id}/content")
+async def get_user_strategy_content(
+    strategy_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Get the file content of a user's own strategy."""
+    try:
+        strategy_db = StrategyDB()
+        strategy = strategy_db.get_strategy_by_id(strategy_id)
+
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        if strategy.author_id != user_id:
+            raise HTTPException(status_code=403, detail="You don't own this strategy")
+
+        upload_handler = StrategyUploadHandler()
+        content = upload_handler.read_strategy_file(strategy.strategy_file)
+        if content is None:
+            raise HTTPException(status_code=404, detail="Strategy file not found")
+
+        strategy_db.close()
+        return {"status": "success", "data": {"content": content}}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+
+
+@app.post("/api/user/strategies/{strategy_id}/request-publish")
+async def request_publish_strategy(
+    strategy_id: str,
+    price: float = Form(0.0),
+    user_id: int = Depends(get_current_user_id)
+):
+    """
+    User requests to publish their strategy to the marketplace.
+    Sets publish_status = 'pending_review'. Admin must approve/reject.
+    """
+    try:
+        strategy_db = StrategyDB()
+
+        # Block publish request for free users
+        if not strategy_db.is_user_subscribed(user_id):
+            strategy_db.close()
+            raise HTTPException(
+                status_code=402,
+                detail="SUBSCRIPTION_REQUIRED: Only Pro subscribers can request to publish strategies."
+            )
+
+        success, error_msg = strategy_db.request_publish_strategy(strategy_id, user_id, price)
+        strategy_db.close()
+
+        if not success:
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        return {
+            "status": "success",
+            "message": "Publish request submitted. Admin will review your strategy."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Request failed: {str(e)}")
+
+
+# ============================================
+# Admin — Strategy Publish Review Endpoints
+# ============================================
+
+@app.get("/api/admin/strategies/pending-review")
+async def get_pending_review_strategies(
+    user_id: int = Depends(get_current_user_id)
+):
+    """Get all user strategies pending admin review."""
+    try:
+        strategy_db = StrategyDB()
+        strategies = strategy_db.get_pending_review_strategies()
+        strategy_db.close()
+        return {
+            "status": "success",
+            "data": [s.to_dict() for s in strategies],
+            "count": len(strategies)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get pending strategies: {str(e)}")
+
+
+@app.get("/api/admin/strategies/{strategy_id}/download")
+async def download_strategy_file(
+    strategy_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Admin downloads a strategy file for manual testing."""
+    from fastapi.responses import FileResponse
+    import os as _os
+
+    try:
+        strategy_db = StrategyDB()
+        strategy = strategy_db.get_strategy_by_id(strategy_id)
+        strategy_db.close()
+
+        if not strategy:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        if not strategy.strategy_file:
+            raise HTTPException(status_code=404, detail="No file attached to this strategy")
+
+        project_root = Path(__file__).parent
+        full_path = project_root / strategy.strategy_file
+
+        if not full_path.exists():
+            raise HTTPException(status_code=404, detail="Strategy file not found on disk")
+
+        filename = f"{strategy.name.replace(' ', '_')}.py"
+        return FileResponse(
+            path=str(full_path),
+            filename=filename,
+            media_type="text/x-python"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Download failed: {str(e)}")
+
+
+@app.post("/api/admin/strategies/{strategy_id}/approve")
+async def approve_strategy(
+    strategy_id: str,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Admin approves a pending strategy — publishes it to marketplace."""
+    try:
+        strategy_db = StrategyDB()
+        success, error_msg = strategy_db.approve_strategy(strategy_id)
+        strategy_db.close()
+
+        if not success:
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        return {"status": "success", "message": "Strategy approved and published to marketplace"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Approval failed: {str(e)}")
+
+
+@app.post("/api/admin/strategies/{strategy_id}/reject")
+async def reject_strategy(
+    strategy_id: str,
+    reason: str = Form(...),
+    user_id: int = Depends(get_current_user_id)
+):
+    """Admin rejects a pending strategy with a reason."""
+    try:
+        strategy_db = StrategyDB()
+        success, error_msg = strategy_db.reject_strategy(strategy_id, reason)
+        strategy_db.close()
+
+        if not success:
+            raise HTTPException(status_code=400, detail=error_msg)
+
+        return {"status": "success", "message": "Strategy rejected"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Rejection failed: {str(e)}")
+
 
 if __name__ == "__main__":
     # Initialize database

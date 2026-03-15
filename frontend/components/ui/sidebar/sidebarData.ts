@@ -39,12 +39,6 @@ export const mainSidebarItems: SidebarItemType[] = [
     icon:  "solar:ticket-line-duotone",
     url: "/support",
   },
-  {
-    id: "no-code-console",
-    name: "Strategy Hub",
-    icon: "solar:programming-line-duotone",
-    url: "/strategy-hub",
-  },
 ];
 
 export const footerSidebarItems: SidebarItemType[] = [

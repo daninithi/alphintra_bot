@@ -4,21 +4,26 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui";
-import { Loader2, Search, SlidersHorizontal } from "lucide-react";
-import { fetchStrategies } from "@/app/api/strategyApi";
+import { Loader2 } from "lucide-react";
+import { fetchStrategies, fetchBoughtStrategies } from "@/app/api/strategyApi";
 import StrategyGrid from "@/components/marketplace/StrategyGrid";
 import { Strategy } from "@/components/marketplace/types";
+import UpgradeModal from "@/components/subscription/UpgradeModal";
+import { getSubscriptionStatus } from "@/lib/api/subscription-api";
+import { useAuth } from "@/components/auth/auth-provider";
 
 type SortType = "price-high" | "price-low" | "name-asc" | "name-desc";
 
 export default function MarketplacePage() {
   const router = useRouter();
+  const { user } = useAuth();
   const [strategies, setStrategies] = useState<Strategy[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortType>("price-high");
   const [selectedStrategy, setSelectedStrategy] = useState<Strategy | null>(null);
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   useEffect(() => {
     async function loadStrategies() {
@@ -92,13 +97,24 @@ export default function MarketplacePage() {
   const visibleStrategiesCount = filteredStrategies.length;
   const premiumStrategiesCount = filteredStrategies.length;
 
-  const handleBuyNow = (strategy: Strategy) => {
+  const handleBuyNow = async (strategy: Strategy) => {
     const strategyId = strategy.strategyId || strategy.id;
 
     if (!strategyId) {
       console.error("Missing strategyId on strategy:", strategy);
       setError("Unable to open payment page: missing strategy id.");
       return;
+    }
+
+    // Check purchase limit for free users
+    const FREE_PURCHASE_LIMIT = 2;
+    const status = await getSubscriptionStatus(Number(user?.id));
+    if (!status.isSubscribed) {
+      const bought = await fetchBoughtStrategies(Number(user?.id)).catch(() => []);
+      if (bought.length >= FREE_PURCHASE_LIMIT) {
+        setShowUpgrade(true);
+        return;
+      }
     }
 
     router.push(
@@ -245,6 +261,10 @@ export default function MarketplacePage() {
           </div>
         )}
       </main>
+
+      {showUpgrade && (
+        <UpgradeModal reason="purchase" onClose={() => setShowUpgrade(false)} />
+      )}
     </div>
   );
 }

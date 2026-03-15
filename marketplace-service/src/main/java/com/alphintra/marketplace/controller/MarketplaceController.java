@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,7 +19,6 @@ import com.alphintra.marketplace.service.MarketplaceService;
 
 @RestController
 @RequestMapping("/marketplace")
-@CrossOrigin(origins = "*")
 public class MarketplaceController {
 
     private final MarketplaceService marketplaceService;

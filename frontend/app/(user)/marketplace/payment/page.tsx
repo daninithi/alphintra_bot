@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { fetchStrategies } from "@/app/api/strategyApi";
 import { Strategy } from "@/components/marketplace/types";
 import { useAuth } from "@/components/auth/auth-provider";
+import { getToken } from "@/lib/auth";
 
 const MARKETPLACE_API_BASE =
-  process.env.NEXT_PUBLIC_MARKETPLACE_API_URL || "http://localhost:8097";
+  process.env.NEXT_PUBLIC_GATEWAY_URL || "http://localhost:8790";
 
 export default function MarketplacePaymentPage() {
   const router = useRouter();
@@ -79,6 +80,7 @@ export default function MarketplacePaymentPage() {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              Authorization: `Bearer ${getToken()}`,
             },
             body: JSON.stringify({
               userId: Number(user.id),
@@ -112,6 +114,7 @@ export default function MarketplacePaymentPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
           },
           body: JSON.stringify({
             userId: Number(user.id),
@@ -130,6 +133,7 @@ export default function MarketplacePaymentPage() {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            Authorization: `Bearer ${getToken()}`,
           },
           body: JSON.stringify({
             strategyId: strategy.strategyId ?? strategy.id,

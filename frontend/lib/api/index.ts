@@ -5,9 +5,8 @@
 import { strategyApi } from './strategy-api';
 import { marketDataApi } from './market-data-api';
 import { riskManagementApi } from './risk-management-api';
-import { noCodeApiClient } from './no-code-api';
-import { subscriptionApiClient } from './subscription-api';
-import { ticketingApi } from './ticketing-api';
+
+
 import { gatewayHttpBaseUrl } from '../config/gateway';
 import { getToken } from '../auth';
 
@@ -25,24 +24,6 @@ export {
   type TradingBot, 
   type StopBotsResponse 
 } from './trading-api';
-export { 
-  noCodeApiClient, 
-  NoCodeApiClient,
-  type Workflow, 
-  type WorkflowCreate, 
-  type WorkflowUpdate,
-  type WorkflowData,
-  type WorkflowNode,
-  type WorkflowEdge,
-  type Execution,
-  type ExecutionConfig,
-  type CompilationResult,
-  type Component,
-  type Template,
-  type WorkflowFilters,
-  type ComponentFilters,
-  type TemplateFilters
-} from './no-code-api';
 
 // Authentication API service
 export interface AuthUser {
@@ -176,12 +157,11 @@ export const authApi = new AuthApiService();
 // Export subscription API
 export { 
   subscriptionApiClient,
-  type CheckoutSessionRequest,
-  type CheckoutSessionResponse,
-  type SubscriptionDto,
   type SubscriptionStatus,
-  STRIPE_PRICE_IDS,
-  SUBSCRIPTION_PLANS
+  SUBSCRIPTION_PLANS,
+  getSubscriptionStatus,
+  startSubscriptionCheckout,
+  activateSubscription,
 } from './subscription-api';
 
 // Export ticketing API
@@ -200,7 +180,7 @@ export const api = {
   strategy: strategyApi,
   marketData: marketDataApi,
   riskManagement: riskManagementApi,
-  noCode: noCodeApiClient,
+  noCode: undefined,
   subscription: subscriptionApiClient,
   ticketing: ticketingApi,
 } as const;

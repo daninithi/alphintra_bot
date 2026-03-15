@@ -3,9 +3,10 @@ Strategy Models
 Handles strategy data and database operations
 """
 from dataclasses import dataclass
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from datetime import datetime
 import psycopg2
+import psycopg2.extras
 from psycopg2.extras import RealDictCursor
 import os
 from dotenv import load_dotenv
@@ -32,6 +33,8 @@ class Strategy:
     price: float = 0.0
     author_id: Optional[int] = None
     total_purchases: int = 0
+    publish_status: str = 'private'  # 'private', 'pending_review', 'approved', 'rejected'
+    reject_reason: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -50,6 +53,8 @@ class Strategy:
             'price': float(self.price) if self.price else 0.0,
             'author_id': self.author_id,
             'total_purchases': self.total_purchases,
+            'publish_status': self.publish_status,
+            'reject_reason': self.reject_reason,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -77,6 +82,37 @@ class StrategyDB:
             logger.error(f"Failed to connect to strategy database: {e}")
             raise
     
+    def is_user_subscribed(self, user_id: int) -> bool:
+        """Returns True if user has an active subscription"""
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT subscription_status, subscription_end_date
+                    FROM users WHERE id = %s
+                """, (user_id,))
+                row = cursor.fetchone()
+                if not row:
+                    return False
+                status, end_date = row
+                from datetime import datetime
+                return status == 'active' and (end_date is None or end_date > datetime.now())
+        except Exception as e:
+            logger.error(f"Failed to check subscription: {e}")
+            return False
+
+    def count_user_imported_strategies(self, user_id: int) -> int:
+        """Count user's imported/created strategies (user_created + marketplace authored)"""
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                    SELECT COUNT(*) FROM strategies
+                    WHERE author_id = %s AND type IN ('user_created', 'marketplace')
+                """, (user_id,))
+                return cursor.fetchone()[0]
+        except Exception as e:
+            logger.error(f"Failed to count imported strategies: {e}")
+            return 0
+
     def get_user_strategies(self, user_id: int) -> List[Strategy]:
         """
         Get all strategies accessible by a user
@@ -90,62 +126,51 @@ class StrategyDB:
                     SELECT * FROM (
                         -- Get all default strategies (available to everyone)
                         SELECT 
-                            s.strategy_id,
-                            s.name,
-                            s.description,
-                            s.type,
+                            s.strategy_id, s.name, s.description, s.type,
                             'default' as access_type,
-                            s.python_class,
-                            s.python_module,
-                            s.strategy_file,
-                            s.parameters,
-                            s.price,
-                            s.author_id,
-                            s.total_purchases,
-                            s.created_at,
-                            s.updated_at
+                            s.python_class, s.python_module, s.strategy_file,
+                            s.parameters, s.price, s.author_id, s.total_purchases,
+                            COALESCE(s.publish_status, 'approved') as publish_status,
+                            s.reject_reason, s.created_at, s.updated_at
                         FROM strategies s
                         WHERE s.type = 'default'
                         
                         UNION
                         
-                        -- Get user's own created strategies
+                        -- Get user's own created strategies (private/pending/rejected)
                         SELECT 
-                            s.strategy_id,
-                            s.name,
-                            s.description,
-                            s.type,
+                            s.strategy_id, s.name, s.description, s.type,
                             'created' as access_type,
-                            s.python_class,
-                            s.python_module,
-                            s.strategy_file,
-                            s.parameters,
-                            s.price,
-                            s.author_id,
-                            s.total_purchases,
-                            s.created_at,
-                            s.updated_at
+                            s.python_class, s.python_module, s.strategy_file,
+                            s.parameters, s.price, s.author_id, s.total_purchases,
+                            COALESCE(s.publish_status, 'private') as publish_status,
+                            s.reject_reason, s.created_at, s.updated_at
                         FROM strategies s
                         WHERE s.type = 'user_created' AND s.author_id = %s
                         
                         UNION
                         
+                        -- Get user's own published (marketplace) strategies
+                        SELECT 
+                            s.strategy_id, s.name, s.description, s.type,
+                            'created' as access_type,
+                            s.python_class, s.python_module, s.strategy_file,
+                            s.parameters, s.price, s.author_id, s.total_purchases,
+                            COALESCE(s.publish_status, 'approved') as publish_status,
+                            s.reject_reason, s.created_at, s.updated_at
+                        FROM strategies s
+                        WHERE s.type = 'marketplace' AND s.author_id = %s
+                        
+                        UNION
+                        
                         -- Get purchased strategies
                         SELECT 
-                            s.strategy_id,
-                            s.name,
-                            s.description,
-                            s.type,
+                            s.strategy_id, s.name, s.description, s.type,
                             us.access_type,
-                            s.python_class,
-                            s.python_module,
-                            s.strategy_file,
-                            s.parameters,
-                            s.price,
-                            s.author_id,
-                            s.total_purchases,
-                            s.created_at,
-                            s.updated_at
+                            s.python_class, s.python_module, s.strategy_file,
+                            s.parameters, s.price, s.author_id, s.total_purchases,
+                            COALESCE(s.publish_status, 'approved') as publish_status,
+                            s.reject_reason, s.created_at, s.updated_at
                         FROM strategies s
                         INNER JOIN user_strategies us ON s.strategy_id = us.strategy_id
                         WHERE us.user_id = %s AND us.access_type = 'purchased'
@@ -157,7 +182,7 @@ class StrategyDB:
                             WHEN 'purchased' THEN 3 
                         END,
                         name
-                """, (user_id, user_id))
+                """, (user_id, user_id, user_id))
                 
                 rows = cursor.fetchall()
                 strategies = [Strategy(**dict(row)) for row in rows]
@@ -175,19 +200,11 @@ class StrategyDB:
             with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
                     SELECT 
-                        strategy_id,
-                        name,
-                        description,
-                        type,
-                        python_class,
-                        python_module,
-                        strategy_file,
-                        parameters,
-                        price,
-                        author_id,
-                        total_purchases,
-                        created_at,
-                        updated_at
+                        strategy_id, name, description, type,
+                        python_class, python_module, strategy_file,
+                        parameters, price, author_id, total_purchases,
+                        COALESCE(publish_status, 'private') as publish_status,
+                        reject_reason, created_at, updated_at
                     FROM strategies
                     WHERE strategy_id = %s
                 """, (strategy_id,))
@@ -348,6 +365,381 @@ class StrategyDB:
             logger.error(f"Failed to purchase strategy: {e}")
             self.connection.rollback()
             return False
+    
+    def create_strategy(
+        self,
+        strategy_id: str,
+        name: str,
+        description: str,
+        strategy_type: str,
+        price: float,
+        python_class: str,
+        python_module: str,
+        strategy_file: str,
+        parameters: Optional[Dict] = None,
+        author_id: Optional[int] = None
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Create a new strategy
+        
+        Args:
+            strategy_id: Unique strategy identifier
+            name: Strategy name
+            description: Strategy description
+            strategy_type: Type ('default' or 'marketplace')
+            price: Strategy price (0 for free)
+            python_class: Python class name
+            python_module: Python module path
+            strategy_file: Relative file path
+            parameters: Optional strategy parameters
+            author_id: Optional author user ID
+        
+        Returns:
+            Tuple of (success, error_message)
+        """
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO strategies 
+                    (strategy_id, name, description, type, price, python_class, 
+                     python_module, strategy_file, parameters, author_id, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, (
+                    strategy_id, name, description, strategy_type, price,
+                    python_class, python_module, strategy_file, 
+                    psycopg2.extras.Json(parameters) if parameters else None,
+                    author_id
+                ))
+                
+                self.connection.commit()
+                logger.info(f"Created strategy: {strategy_id}")
+                return True, None
+                
+        except psycopg2.IntegrityError as e:
+            logger.error(f"Strategy already exists: {e}")
+            self.connection.rollback()
+            return False, "Strategy with this ID already exists"
+        except Exception as e:
+            logger.error(f"Failed to create strategy: {e}")
+            self.connection.rollback()
+            return False, str(e)
+    
+    def update_strategy(
+        self,
+        strategy_id: str,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        price: Optional[float] = None,
+        parameters: Optional[Dict] = None
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Update strategy metadata (does not update file)
+        
+        Args:
+            strategy_id: Strategy ID to update
+            name: New name (optional)
+            description: New description (optional)
+            price: New price (optional)
+            parameters: New parameters (optional)
+        
+        Returns:
+            Tuple of (success, error_message)
+        """
+        try:
+            # Build dynamic UPDATE query
+            updates = []
+            values = []
+            
+            if name is not None:
+                updates.append("name = %s")
+                values.append(name)
+            
+            if description is not None:
+                updates.append("description = %s")
+                values.append(description)
+            
+            if price is not None:
+                updates.append("price = %s")
+                values.append(price)
+            
+            if parameters is not None:
+                updates.append("parameters = %s")
+                values.append(psycopg2.extras.Json(parameters))
+            
+            if not updates:
+                return False, "No fields to update"
+            
+            updates.append("updated_at = CURRENT_TIMESTAMP")
+            values.append(strategy_id)
+            
+            with self.connection.cursor() as cursor:
+                query = f"""
+                    UPDATE strategies 
+                    SET {', '.join(updates)}
+                    WHERE strategy_id = %s
+                """
+                cursor.execute(query, values)
+                
+                if cursor.rowcount == 0:
+                    self.connection.rollback()
+                    return False, "Strategy not found"
+                
+                self.connection.commit()
+                logger.info(f"Updated strategy: {strategy_id}")
+                return True, None
+                
+        except Exception as e:
+            logger.error(f"Failed to update strategy: {e}")
+            self.connection.rollback()
+            return False, str(e)
+    
+    def delete_strategy(self, strategy_id: str) -> Tuple[bool, Optional[str]]:
+        """
+        Delete a strategy (hard delete)
+        
+        Args:
+            strategy_id: Strategy ID to delete
+        
+        Returns:
+            Tuple of (success, error_message)
+        """
+        try:
+            with self.connection.cursor() as cursor:
+                # First, check if strategy exists
+                cursor.execute("""
+                    SELECT strategy_file FROM strategies WHERE strategy_id = %s
+                """, (strategy_id,))
+                
+                result = cursor.fetchone()
+                if not result:
+                    return False, "Strategy not found"
+                
+                # Delete strategy
+                cursor.execute("""
+                    DELETE FROM strategies WHERE strategy_id = %s
+                """, (strategy_id,))
+                
+                self.connection.commit()
+                logger.info(f"Deleted strategy: {strategy_id}")
+                return True, None
+                
+        except Exception as e:
+            logger.error(f"Failed to delete strategy: {e}")
+            self.connection.rollback()
+            return False, str(e)
+    
+    def get_all_strategies_admin(self, strategy_type: Optional[str] = None) -> List[Strategy]:
+        """
+        Get all strategies for admin view (no user filtering)
+        
+        Args:
+            strategy_type: Optional filter by type ('default', 'marketplace', 'user_created')
+        
+        Returns:
+            List of all strategies
+        """
+        try:
+            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                if strategy_type:
+                    cursor.execute("""
+                        SELECT 
+                            strategy_id, name, description, type, python_class,
+                            python_module, strategy_file, parameters, price,
+                            author_id, total_purchases,
+                            COALESCE(publish_status, 'approved') as publish_status,
+                            reject_reason, created_at, updated_at
+                        FROM strategies
+                        WHERE type = %s
+                        ORDER BY created_at DESC
+                    """, (strategy_type,))
+                else:
+                    cursor.execute("""
+                        SELECT 
+                            strategy_id, name, description, type, python_class,
+                            python_module, strategy_file, parameters, price,
+                            author_id, total_purchases,
+                            COALESCE(publish_status, 'approved') as publish_status,
+                            reject_reason, created_at, updated_at
+                        FROM strategies
+                        ORDER BY created_at DESC
+                    """)
+                
+                rows = cursor.fetchall()
+                strategies = [Strategy(**dict(row)) for row in rows]
+                
+                logger.info(f"Retrieved {len(strategies)} strategies for admin")
+                return strategies
+                
+        except Exception as e:
+            logger.error(f"Failed to get strategies for admin: {e}")
+            return []
+
+    # ============================================
+    # User Strategy Methods
+    # ============================================
+
+    def create_user_strategy(
+        self,
+        strategy_id: str,
+        name: str,
+        description: str,
+        price: float,
+        python_class: str,
+        python_module: str,
+        strategy_file: str,
+        author_id: int,
+        parameters: Optional[Dict] = None
+    ) -> Tuple[bool, Optional[str]]:
+        """Create a private user-imported strategy."""
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                    INSERT INTO strategies 
+                    (strategy_id, name, description, type, price, python_class, 
+                     python_module, strategy_file, parameters, author_id,
+                     publish_status, created_at, updated_at)
+                    VALUES (%s, %s, %s, 'user_created', %s, %s, %s, %s, %s, %s,
+                            'private', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                """, (
+                    strategy_id, name, description, price,
+                    python_class, python_module, strategy_file,
+                    psycopg2.extras.Json(parameters) if parameters else None,
+                    author_id
+                ))
+                self.connection.commit()
+                logger.info(f"Created user strategy: {strategy_id} for user {author_id}")
+                return True, None
+        except psycopg2.IntegrityError as e:
+            self.connection.rollback()
+            return False, "Strategy with this ID already exists"
+        except Exception as e:
+            self.connection.rollback()
+            return False, str(e)
+
+    def get_user_imported_strategies(self, user_id: int) -> List[Strategy]:
+        """Get strategies imported/created by a specific user."""
+        try:
+            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT 
+                        strategy_id, name, description, type, python_class,
+                        python_module, strategy_file, parameters, price,
+                        author_id, total_purchases,
+                        COALESCE(publish_status, 'private') as publish_status,
+                        reject_reason, created_at, updated_at,
+                        'created' as access_type
+                    FROM strategies
+                    WHERE author_id = %s AND (type = 'user_created' OR (type = 'marketplace' AND publish_status = 'approved'))
+                    ORDER BY created_at DESC
+                """, (user_id,))
+                rows = cursor.fetchall()
+                return [Strategy(**dict(row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to get user imported strategies: {e}")
+            return []
+
+    def request_publish_strategy(
+        self,
+        strategy_id: str,
+        user_id: int,
+        price: float
+    ) -> Tuple[bool, Optional[str]]:
+        """User requests to publish their strategy to the marketplace."""
+        try:
+            with self.connection.cursor() as cursor:
+                # Verify ownership
+                cursor.execute("""
+                    SELECT strategy_id, publish_status 
+                    FROM strategies 
+                    WHERE strategy_id = %s AND author_id = %s AND type = 'user_created'
+                """, (strategy_id, user_id))
+                row = cursor.fetchone()
+                if not row:
+                    return False, "Strategy not found or you don't own it"
+                if row[1] == 'pending_review':
+                    return False, "Publish request already pending"
+                if row[1] == 'approved':
+                    return False, "Strategy is already published"
+                if row[1] == 'rejected':
+                    return False, "This strategy was rejected and cannot be re-submitted"
+                if row[1] != 'private':
+                    return False, "Strategy cannot be submitted for review in its current state"
+
+                cursor.execute("""
+                    UPDATE strategies
+                    SET publish_status = 'pending_review',
+                        price = %s,
+                        reject_reason = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE strategy_id = %s AND author_id = %s
+                """, (price, strategy_id, user_id))
+                self.connection.commit()
+                logger.info(f"Publish request submitted for strategy {strategy_id} by user {user_id}")
+                return True, None
+        except Exception as e:
+            self.connection.rollback()
+            return False, str(e)
+
+    def get_pending_review_strategies(self) -> List[Strategy]:
+        """Get all strategies awaiting admin review."""
+        try:
+            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT 
+                        strategy_id, name, description, type, python_class,
+                        python_module, strategy_file, parameters, price,
+                        author_id, total_purchases, publish_status,
+                        reject_reason, created_at, updated_at
+                    FROM strategies
+                    WHERE publish_status = 'pending_review'
+                    ORDER BY updated_at ASC
+                """)
+                rows = cursor.fetchall()
+                return [Strategy(**dict(row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to get pending review strategies: {e}")
+            return []
+
+    def approve_strategy(self, strategy_id: str) -> Tuple[bool, Optional[str]]:
+        """Admin approves a pending publish request — moves to marketplace."""
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE strategies
+                    SET type = 'marketplace',
+                        publish_status = 'approved',
+                        reject_reason = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE strategy_id = %s AND publish_status = 'pending_review'
+                """, (strategy_id,))
+                if cursor.rowcount == 0:
+                    return False, "Strategy not found or not pending review"
+                self.connection.commit()
+                logger.info(f"Strategy approved: {strategy_id}")
+                return True, None
+        except Exception as e:
+            self.connection.rollback()
+            return False, str(e)
+
+    def reject_strategy(self, strategy_id: str, reason: str) -> Tuple[bool, Optional[str]]:
+        """Admin rejects a pending publish request."""
+        try:
+            with self.connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE strategies
+                    SET publish_status = 'rejected',
+                        reject_reason = %s,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE strategy_id = %s AND publish_status = 'pending_review'
+                """, (reason, strategy_id))
+                if cursor.rowcount == 0:
+                    return False, "Strategy not found or not pending review"
+                self.connection.commit()
+                logger.info(f"Strategy rejected: {strategy_id} — {reason}")
+                return True, None
+        except Exception as e:
+            self.connection.rollback()
+            return False, str(e)
     
     def close(self):
         """Close database connection"""

@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const MARKETPLACE_BASE_URL = "http://localhost:8097";
+const MARKETPLACE_BASE_URL = process.env.NEXT_PUBLIC_GATEWAY_URL ?? "http://localhost:8790";
 
 export interface MarketplaceStrategyApi {
   id: number;
