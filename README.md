@@ -44,6 +44,10 @@ cd auth-service
 cd ticketing-service
 ./mvnw spring-boot:run
 ```
+### 3. marketplace Service
+```bash
+cd marketplace-service
+./mvn spring-boot:run
 
 ### 4. Wallet Service
 ```bash
