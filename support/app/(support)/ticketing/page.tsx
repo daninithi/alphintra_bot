@@ -1,453 +1,398 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useAuth } from '@/components/auth/auth-provider';
 import axios from 'axios';
-import { X, Eye, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import { buildGatewayUrl } from '@/lib/config/gateway';
+import { getToken } from '@/lib/auth';
+
+type TicketStatus = 'NEW' | 'IN_PROGRESS'  | 'RESOLVED' | 'CLOSED' | 'REOPENED';
+type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
 interface Ticket {
   id: number;
   title: string;
   description: string;
-  status: 'NEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'REOPENED';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  status: TicketStatus;
+  priority: TicketPriority | null;
   category: string;
   customerId: string;
-  customerEmail: string;
-  customerName: string;
+  customerEmail: string | null;
+  customerName: string | null;
   assigneeId: number | null;
   assignedAgentName: string | null;
   assignedAgentEmail: string | null;
+  assigned: boolean | null;
   errorLogs: string | null;
-  tags: string[];
-  attachments: string[];
+  tags: string[] | null;
   createdAt: string;
   updatedAt: string;
 }
 
-interface UpdateTicketData {
-  status?: string;
-  priority?: string;
-  responseNote?: string;
-}
+const STATUS_OPTIONS: Array<'ALL' | TicketStatus> = [
+  'ALL', 'NEW', 'IN_PROGRESS', 'RESOLVED', 'CLOSED', 'REOPENED',
+];
 
-const STATUS_COLORS = {
-  NEW: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/30',
-  ASSIGNED: 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/30',
-  IN_PROGRESS: 'bg-yellow-50 text-yellow-700 border-yellow-200 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/30',
-  RESOLVED: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/30',
-  CLOSED: 'bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-500/10 dark:text-gray-400 dark:border-gray-500/30',
-  REOPENED: 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-500/10 dark:text-orange-400 dark:border-orange-500/30'
+const formatEnum = (value: string | null | undefined): string => {
+  if (!value) return 'Not set';
+  return value.split('_').map((p) => p.charAt(0) + p.slice(1).toLowerCase()).join(' ');
 };
 
-const PRIORITY_COLORS = {
-  LOW: 'bg-gray-50 text-gray-600 dark:bg-gray-500/10 dark:text-gray-400',
-  MEDIUM: 'bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400',
-  HIGH: 'bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-400',
-  URGENT: 'bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400'
+const formatDateTime = (value: string | null | undefined): string => {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Invalid date';
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).format(date);
+};
+
+const getStatusBadgeClass = (status: TicketStatus): string => {
+  switch (status) {
+    case 'NEW': return 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300';
+    case 'IN_PROGRESS': return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+    case 'RESOLVED': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300';
+    case 'CLOSED': return 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200';
+    case 'REOPENED': return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300';
+    default: return 'bg-muted text-foreground';
+  }
+};
+
+const getPriorityBadgeClass = (priority: TicketPriority | null): string => {
+  switch (priority) {
+    case 'URGENT': return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+    case 'HIGH': return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300';
+    case 'MEDIUM': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300';
+    case 'LOW': return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+    default: return 'bg-muted text-foreground';
+  }
 };
 
 export default function SupportTicketingPage() {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
-  const [showModal, setShowModal] = useState(false);
-  const [updating, setUpdating] = useState(false);
-  const [updateData, setUpdateData] = useState<UpdateTicketData>({});
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | TicketStatus>('ALL');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loadingList, setLoadingList] = useState(true);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [updatingTicket, setUpdatingTicket] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const authHeaders = () => {
+    const token = getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const filteredTickets = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    return tickets.filter((ticket) => {
+      const haystack = [ticket.title, ticket.description, ticket.customerEmail ?? '', ticket.customerName ?? '', String(ticket.id)]
+        .join(' ').toLowerCase();
+      return !query || haystack.includes(query);
+    });
+  }, [searchTerm, tickets]);
+
+  const fetchTickets = async (preferredTicketId?: number | null) => {
+    if (!user) return;
+    setLoadingList(true);
+    setError('');
+    try {
+      const response = await axios.get(buildGatewayUrl('/ticketing/tickets'), {
+        headers: authHeaders(),
+        params: {
+          page: 0,
+          size: 100,
+          assigneeId: user.id,
+          status: statusFilter === 'ALL' ? undefined : statusFilter,
+        },
+      });
+      const nextTickets: Ticket[] = response.data.content ?? [];
+      setTickets(nextTickets);
+      const nextSelectedId =
+        preferredTicketId && nextTickets.some((t) => t.id === preferredTicketId)
+          ? preferredTicketId
+          : nextTickets[0]?.id ?? null;
+      setSelectedTicketId(nextSelectedId);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load tickets.');
+      setTickets([]);
+      setSelectedTicketId(null);
+    } finally {
+      setLoadingList(false);
+    }
+  };
+
+  const fetchTicketDetail = async (ticketId: number) => {
+    setLoadingDetail(true);
+    setError('');
+    try {
+      const response = await axios.get<Ticket>(buildGatewayUrl(`/ticketing/tickets/${ticketId}`), {
+        headers: authHeaders(),
+        params: { agentView: true },
+      });
+      setSelectedTicket(response.data);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to load ticket details.');
+      setSelectedTicket(null);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
 
   useEffect(() => {
     fetchTickets();
-  }, [user]);
+  }, [user, statusFilter]);
 
-  const fetchTickets = async () => {
-    try {
-      const token = localStorage.getItem('alphintra_auth_token');
-      if (!user || !token) return;
-
-      const response = await axios.get(`http://localhost:8790/ticketing/tickets`, {
-        params: {
-          assigneeId: user.id
-        },
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.data && response.data.content) {
-        setTickets(response.data.content);
-      }
-    } catch (error: any) {
-      console.error('Failed to fetch tickets:', error);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (selectedTicketId) {
+      fetchTicketDetail(selectedTicketId);
+    } else {
+      setSelectedTicket(null);
     }
+  }, [selectedTicketId]);
+
+  const refreshSelected = async (ticketId: number) => {
+    await Promise.all([fetchTickets(ticketId), fetchTicketDetail(ticketId)]);
   };
 
-  const openTicketModal = async (ticketId: number) => {
-    try {
-      const token = localStorage.getItem('alphintra_auth_token');
-      const response = await axios.get(`http://localhost:8790/ticketing/tickets/${ticketId}`, {
-        params: { agentView: true },
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      setSelectedTicket(response.data);
-      setUpdateData({
-        status: response.data.status,
-        priority: response.data.priority
-      });
-      setShowModal(true);
-    } catch (error) {
-      console.error('Failed to fetch ticket details:', error);
-    }
-  };
-
-  const handleUpdateTicket = async () => {
+  const updateStatus = async (nextStatus: TicketStatus) => {
     if (!selectedTicket) return;
-    
-    setUpdating(true);
-    setMessage(null);
-
+    setUpdatingTicket(true);
+    setError('');
+    setSuccess('');
     try {
-      const token = localStorage.getItem('alphintra_auth_token');
       await axios.put(
-        `http://localhost:8790/ticketing/tickets/${selectedTicket.id}`,
-        updateData,
-        {
-          params: { agentView: true },
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        buildGatewayUrl(`/ticketing/tickets/${selectedTicket.id}`),
+        { status: nextStatus },
+        { headers: { ...authHeaders(), 'Content-Type': 'application/json' }, params: { agentView: true } }
       );
-
-      setMessage({ type: 'success', text: 'Ticket updated successfully' });
-      fetchTickets();
-      
-      setTimeout(() => {
-        setShowModal(false);
-        setSelectedTicket(null);
-        setUpdateData({});
-      }, 1500);
-    } catch (error: any) {
-      console.error('Failed to update ticket:', error);
-      setMessage({ 
-        type: 'error', 
-        text: 'Failed to update ticket' 
-      });
+      await refreshSelected(selectedTicket.id);
+      setSuccess(`Ticket updated to ${formatEnum(nextStatus)}.`);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to update ticket status.');
     } finally {
-      setUpdating(false);
+      setUpdatingTicket(false);
     }
   };
 
-  const handleResolveTicket = async () => {
+  const resolveTicket = async () => {
     if (!selectedTicket) return;
-    
-    setUpdating(true);
+    setUpdatingTicket(true);
+    setError('');
+    setSuccess('');
     try {
-      const token = localStorage.getItem('alphintra_auth_token');
-      await axios.put(
-        `http://localhost:8790/ticketing/tickets/${selectedTicket.id}/resolve`,
-        {},
-        { headers: { 'Authorization': `Bearer ${token}` } }
-      );
-
-      setMessage({ type: 'success', text: 'Ticket resolved successfully' });
-      fetchTickets();
-      setTimeout(() => {
-        setShowModal(false);
-        setSelectedTicket(null);
-      }, 1500);
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Failed to resolve ticket' });
+      await axios.put(buildGatewayUrl(`/ticketing/tickets/${selectedTicket.id}/resolve`), {}, { headers: authHeaders() });
+      await refreshSelected(selectedTicket.id);
+      setSuccess('Ticket marked as resolved.');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to resolve ticket.');
     } finally {
-      setUpdating(false);
+      setUpdatingTicket(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
+  const reopenTicket = async () => {
+    if (!selectedTicket) return;
+    setUpdatingTicket(true);
+    setError('');
+    setSuccess('');
+    try {
+      await axios.put(buildGatewayUrl(`/ticketing/tickets/${selectedTicket.id}/reopen`), {}, { headers: authHeaders() });
+      await refreshSelected(selectedTicket.id);
+      setSuccess('Ticket reopened.');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to reopen ticket.');
+    } finally {
+      setUpdatingTicket(false);
+    }
   };
-
-  const filteredTickets = filterStatus 
-    ? tickets.filter(t => t.status === filterStatus)
-    : tickets;
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-foreground text-xl">Loading tickets...</div>
-      </div>
-    );
-  }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">My Assigned Tickets</h1>
-          <p className="text-muted-foreground">View and manage your assigned support tickets</p>
-        </div>
-        <select
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value)}
-          className="rounded-md border border-border bg-background px-4 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">All Status</option>
-          <option value="NEW">New</option>
-          <option value="ASSIGNED">Assigned</option>
-          <option value="IN_PROGRESS">In Progress</option>
-          <option value="RESOLVED">Resolved</option>
-          <option value="CLOSED">Closed</option>
-          <option value="REOPENED">Reopened</option>
-        </select>
+    <div className="max-w-full space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-foreground">My Assigned Tickets</h1>
+        <p className="mt-1 text-sm text-muted-foreground">View and manage support tickets assigned to you.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-muted-foreground text-sm">Total</p>
-              <p className="text-2xl font-bold text-foreground">{tickets.length}</p>
+      <div className="grid gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+        {/* Ticket list panel */}
+        <section className="rounded-lg border border-border bg-card shadow-sm">
+          <div className="border-b border-border p-4 space-y-3">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px]">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search tickets..."
+                className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-yellow-500"
+              />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as 'ALL' | TicketStatus)}
+                className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-yellow-500"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt === 'ALL' ? 'All statuses' : formatEnum(opt)}</option>
+                ))}
+              </select>
             </div>
-            <AlertCircle className="w-8 h-8 text-blue-500 dark:text-blue-400" />
-          </div>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-muted-foreground text-sm">In Progress</p>
-              <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-                {tickets.filter(t => t.status === 'IN_PROGRESS').length}
-              </p>
+            <div className="text-xs text-muted-foreground">
+              Showing {filteredTickets.length} of {tickets.length} tickets
             </div>
-            <Clock className="w-8 h-8 text-yellow-500 dark:text-yellow-400" />
           </div>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-muted-foreground text-sm">Resolved</p>
-              <p className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {tickets.filter(t => t.status === 'RESOLVED').length}
-              </p>
-            </div>
-            <CheckCircle className="w-8 h-8 text-green-500 dark:text-green-400" />
-          </div>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-muted-foreground text-sm">New</p>
-              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                {tickets.filter(t => t.status === 'NEW' || t.status === 'ASSIGNED').length}
-              </p>
-            </div>
-            <XCircle className="w-8 h-8 text-blue-500 dark:text-blue-400" />
-          </div>
-        </div>
-      </div>
 
-      <div className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40">
-              <tr className="border-b border-border">
-                <th className="px-4 py-3 text-left font-semibold text-foreground">ID</th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">Title</th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">Customer</th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">Status</th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">Priority</th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">Created</th>
-                <th className="px-4 py-3 text-left font-semibold text-foreground">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTickets.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-muted-foreground">
-                    No tickets found
-                  </td>
-                </tr>
-              ) : (
-                filteredTickets.map((ticket) => (
-                  <tr 
-                    key={ticket.id} 
-                    className="border-t border-border hover:bg-muted/20 transition-colors"
-                  >
-                    <td className="px-4 py-3 text-foreground">{ticket.id}</td>
-                    <td className="px-4 py-3">
-                      <div className="max-w-xs">
-                        <p className="text-sm font-medium text-foreground truncate">{ticket.title}</p>
-                        <p className="text-xs text-muted-foreground truncate mt-1">{ticket.description}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="text-sm text-foreground">{ticket.customerName || 'N/A'}</p>
-                        <p className="text-xs text-muted-foreground">{ticket.customerEmail}</p>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-3 py-1 text-xs font-medium rounded-full border ${STATUS_COLORS[ticket.status]}`}>
-                        {ticket.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-3 py-1 text-xs font-medium rounded-full ${PRIORITY_COLORS[ticket.priority]}`}>
-                        {ticket.priority}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {new Date(ticket.createdAt).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => openTicketModal(ticket.id)}
-                        className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 hover:bg-muted/40 transition-colors text-foreground"
-                      >
-                        <Eye className="w-4 h-4" />
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {showModal && selectedTicket && (
-        <div className="fixed inset-0 -top-10 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-xl border border-border max-w-4xl w-full max-h-[90vh] shadow-2xl overflow-hidden">
-            <div className="flex flex-col h-full max-h-[90vh]">
-              {/* Header */}
-              <div className="flex-shrink-0 bg-card border-b border-border px-6 py-5 flex justify-between items-start">
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-2xl font-bold text-foreground">Ticket {selectedTicket.id}</h2>
-                  <p className="text-muted-foreground text-sm mt-1">{selectedTicket.title}</p>
-                </div>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="p-2 hover:bg-muted/40 rounded-lg transition-colors ml-4 flex-shrink-0"
-                >
-                  <X className="w-6 h-6 text-foreground" />
-                </button>
-              </div>
-
-              {/* Content */}
-              <div className="p-6 space-y-6 overflow-y-auto flex-1 bg-card">
-              {message && (
-                <div
-                  className={`p-4 rounded-lg text-sm font-medium border ${
-                    message.type === 'success'
-                      ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/20 dark:text-green-200 dark:border-green-400/50'
-                      : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-500/20 dark:text-red-200 dark:border-red-400/50'
-                  }`}
-                >
-                  {message.text}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-muted/40 rounded-lg p-4 border border-border">
-                  <p className="text-muted-foreground text-sm mb-1">Customer</p>
-                  <p className="text-foreground font-medium">{selectedTicket.customerName || 'N/A'}</p>
-                  <p className="text-muted-foreground text-sm">{selectedTicket.customerEmail}</p>
-                </div>
-                <div className="bg-muted/40 rounded-lg p-4 border border-border">
-                  <p className="text-muted-foreground text-sm mb-1">Category</p>
-                  <p className="text-foreground font-medium">{selectedTicket.category?.replace('_', ' ')}</p>
-                </div>
-                <div className="bg-muted/40 rounded-lg p-4 border border-border">
-                  <p className="text-muted-foreground text-sm mb-1">Created</p>
-                  <p className="text-foreground font-medium">{formatDate(selectedTicket.createdAt)}</p>
-                </div>
-                <div className="bg-muted/40 rounded-lg p-4 border border-border">
-                  <p className="text-muted-foreground text-sm mb-1">Last Updated</p>
-                  <p className="text-foreground font-medium">{formatDate(selectedTicket.updatedAt)}</p>
-                </div>
-              </div>
-
-              <div className="bg-muted/40 rounded-lg p-4 border border-border">
-                <p className="text-muted-foreground text-sm mb-2">Description</p>
-                <p className="text-foreground whitespace-pre-wrap">{selectedTicket.description}</p>
-              </div>
-
-              {selectedTicket.errorLogs && (
-                <div className="bg-muted/40 rounded-lg p-4 border border-border">
-                  <p className="text-muted-foreground text-sm mb-2">Error Logs</p>
-                  <pre className="text-red-600 dark:text-red-400/90 text-xs bg-red-50 dark:bg-red-500/10 p-3 rounded overflow-x-auto border border-red-200 dark:border-red-500/30">
-                    {selectedTicket.errorLogs}
-                  </pre>
-                </div>
-              )}
-
-              <div className="bg-muted/40 rounded-lg p-4 border border-border space-y-4">
-                <h3 className="text-foreground font-semibold text-lg">Update Ticket</h3>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-muted-foreground text-sm mb-2">Status</label>
-                    <select
-                      value={updateData.status || selectedTicket.status}
-                      onChange={(e) => setUpdateData({ ...updateData, status: e.target.value })}
-                      className="w-full bg-background text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="NEW">New</option>
-                      <option value="ASSIGNED">Assigned</option>
-                      <option value="IN_PROGRESS">In Progress</option>
-                      <option value="RESOLVED">Resolved</option>
-                      <option value="CLOSED">Closed</option>
-                      <option value="REOPENED">Reopened</option>
-                    </select>
-                  </div>
-                  
-                  <div>
-                    <label className="block text-muted-foreground text-sm mb-2">Priority</label>
-                    <select
-                      value={updateData.priority || selectedTicket.priority}
-                      onChange={(e) => setUpdateData({ ...updateData, priority: e.target.value })}
-                      className="w-full bg-background text-foreground px-4 py-2 rounded-lg border border-border focus:outline-none focus:ring-2 focus:ring-ring"
-                    >
-                      <option value="LOW">Low</option>
-                      <option value="MEDIUM">Medium</option>
-                      <option value="HIGH">High</option>
-                      <option value="URGENT">Urgent</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={handleUpdateTicket}
-                  disabled={updating}
-                  className="flex-1 bg-primary hover:bg-primary/90 disabled:opacity-50 text-primary-foreground font-semibold py-3 px-6 rounded-lg transition-all disabled:cursor-not-allowed"
-                >
-                  {updating ? 'Updating...' : 'Update Ticket'}
-                </button>
-                
-                {selectedTicket.status !== 'RESOLVED' && selectedTicket.status !== 'CLOSED' && (
+          <div className="max-h-[75vh] overflow-y-auto">
+            {loadingList ? (
+              <div className="p-4 text-sm text-muted-foreground">Loading tickets...</div>
+            ) : filteredTickets.length === 0 ? (
+              <div className="p-4 text-sm text-muted-foreground">No tickets found.</div>
+            ) : (
+              filteredTickets.map((ticket) => {
+                const isActive = ticket.id === selectedTicketId;
+                return (
                   <button
-                    onClick={handleResolveTicket}
-                    disabled={updating}
-                    className="flex-1 bg-green-600 hover:bg-green-700 dark:bg-green-500/20 dark:hover:bg-green-500/30 dark:text-green-400 dark:border-2 dark:border-green-500/40 text-white font-semibold py-3 px-6 rounded-lg transition-all disabled:cursor-not-allowed disabled:opacity-50"
+                    key={ticket.id}
+                    type="button"
+                    onClick={() => setSelectedTicketId(ticket.id)}
+                    className={`w-full border-b border-border p-4 text-left transition-colors ${isActive ? 'bg-yellow-50 dark:bg-yellow-900/10' : 'hover:bg-muted/40'}`}
                   >
-                    {updating ? 'Resolving...' : 'Mark as Resolved'}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>#{ticket.id}</span>
+                          <span className={`rounded-full px-2 py-1 font-medium ${getStatusBadgeClass(ticket.status)}`}>
+                            {formatEnum(ticket.status)}
+                          </span>
+                        </div>
+                        <h2 className="mt-2 truncate text-sm font-semibold text-foreground">{ticket.title}</h2>
+                        <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{ticket.description}</p>
+                      </div>
+                      <span className={`rounded-full px-2 py-1 text-xs font-medium ${getPriorityBadgeClass(ticket.priority)}`}>
+                        {formatEnum(ticket.priority)}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground truncate">
+                      {ticket.customerEmail || ticket.customerName || 'No customer info'}
+                    </div>
                   </button>
+                );
+              })
+            )}
+          </div>
+        </section>
+
+        {/* Ticket detail panel */}
+        <section className="rounded-lg border border-border bg-card shadow-sm">
+          {error && (
+            <div className="border-b border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-950/20 dark:text-red-300">
+              {error}
+            </div>
+          )}
+          {success && (
+            <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300">
+              {success}
+            </div>
+          )}
+
+          {!selectedTicketId ? (
+            <div className="p-8 text-sm text-muted-foreground">Select a ticket to view its details.</div>
+          ) : loadingDetail || !selectedTicket ? (
+            <div className="p-8 text-sm text-muted-foreground">Loading ticket details...</div>
+          ) : (
+            <div className="flex max-h-[75vh] flex-col overflow-y-auto">
+              <div className="p-5 space-y-5">
+                {/* Title & badges */}
+                <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-border bg-background p-5">
+                  <div>
+                    <div className="text-sm text-muted-foreground">Ticket #{selectedTicket.id}</div>
+                    <h2 className="mt-1 text-2xl font-semibold text-foreground">{selectedTicket.title}</h2>
+                    <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm text-muted-foreground">
+                      {selectedTicket.description}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeClass(selectedTicket.status)}`}>
+                      {formatEnum(selectedTicket.status)}
+                    </span>
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${getPriorityBadgeClass(selectedTicket.priority)}`}>
+                      {formatEnum(selectedTicket.priority)}
+                    </span>
+                    <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-foreground">
+                      {formatEnum(selectedTicket.category)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Info grid */}
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Customer</div>
+                    <div className="mt-1 text-sm font-medium text-foreground">{selectedTicket.customerName || 'N/A'}</div>
+                    <div className="text-xs text-muted-foreground break-all">{selectedTicket.customerEmail || '—'}</div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Created</div>
+                    <div className="mt-1 text-sm font-medium text-foreground">{formatDateTime(selectedTicket.createdAt)}</div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Last Updated</div>
+                    <div className="mt-1 text-sm font-medium text-foreground">{formatDateTime(selectedTicket.updatedAt)}</div>
+                  </div>
+                </div>
+
+                {/* Error logs */}
+                {selectedTicket.errorLogs && (
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    <div className="text-xs uppercase tracking-wide text-muted-foreground">Error Logs</div>
+                    <pre className="mt-2 whitespace-pre-wrap text-xs text-foreground">{selectedTicket.errorLogs}</pre>
+                  </div>
                 )}
+
+                {/* Actions */}
+                <div className="rounded-lg border border-border bg-background p-4">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-3">Ticket Actions</div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <select
+                      value={selectedTicket.status}
+                      onChange={(e) => updateStatus(e.target.value as TicketStatus)}
+                      disabled={updatingTicket}
+                      className="flex-1 rounded-lg border border-border bg-background px-4 py-2 text-sm text-foreground outline-none focus:ring-2 focus:ring-yellow-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {STATUS_OPTIONS.filter((o) => o !== 'ALL').map((opt) => (
+                        <option key={opt} value={opt}>{formatEnum(opt)}</option>
+                      ))}
+                    </select>
+
+                    {selectedTicket.status === 'RESOLVED' ? (
+                      <button
+                        type="button"
+                        onClick={reopenTicket}
+                        disabled={updatingTicket}
+                        className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {updatingTicket ? 'Working...' : 'Reopen'}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={resolveTicket}
+                        disabled={updatingTicket || selectedTicket.status === 'CLOSED'}
+                        className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {updatingTicket ? 'Working...' : 'Mark Solved'}
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-            </div>
-          </div>
-        </div>
-      )}
+          )}
+        </section>
+      </div>
     </div>
   );
 }

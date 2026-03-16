@@ -5,7 +5,7 @@ import axios from 'axios';
 import { buildGatewayUrl } from '@/lib/config/gateway';
 import { getToken } from '@/lib/auth';
 
-type TicketStatus = 'NEW' | 'ASSIGNED' | 'IN_PROGRESS' | 'ESCALATED' | 'RESOLVED' | 'CLOSED' | 'REOPENED';
+type TicketStatus = 'NEW' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED' | 'REOPENED';
 type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 type TicketCategory =
 	| 'TECHNICAL'
@@ -35,6 +35,7 @@ interface Ticket {
 	assigneeId: number | null;
 	assignedAgentName: string | null;
 	assignedAgentEmail: string | null;
+	assigned: boolean | null;
 	communicationCount: number | null;
 	customerUnreadCount: number | null;
 	agentUnreadCount: number | null;
@@ -79,9 +80,7 @@ type AssignmentFilter = 'ALL' | 'ASSIGNED' | 'UNASSIGNED';
 const STATUS_OPTIONS: Array<'ALL' | TicketStatus> = [
 	'ALL',
 	'NEW',
-	'ASSIGNED',
 	'IN_PROGRESS',
-	'ESCALATED',
 	'RESOLVED',
 	'CLOSED',
 	'REOPENED',
@@ -122,16 +121,14 @@ const getStatusBadgeClass = (status: TicketStatus): string => {
 	switch (status) {
 		case 'NEW':
 			return 'bg-sky-100 text-sky-800 dark:bg-sky-900/30 dark:text-sky-300';
-		case 'ASSIGNED':
-			return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300';
 		case 'IN_PROGRESS':
 			return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
-		case 'ESCALATED':
-			return 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-300';
 		case 'RESOLVED':
 			return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300';
 		case 'CLOSED':
 			return 'bg-slate-200 text-slate-800 dark:bg-slate-800 dark:text-slate-200';
+		case 'REOPENED':
+			return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300';
 		default:
 			return 'bg-muted text-foreground';
 	}
@@ -188,8 +185,8 @@ export default function AdminTicketingPage() {
 				assignmentFilter === 'ALL'
 					? true
 					: assignmentFilter === 'ASSIGNED'
-						? Boolean(ticket.assigneeId)
-						: !ticket.assigneeId;
+						? Boolean(ticket.assigned)
+						: !ticket.assigned;
 
 			const haystack = [
 				ticket.title,
@@ -531,8 +528,8 @@ export default function AdminTicketingPage() {
 													<span className={`rounded-full px-2 py-1 font-medium ${getStatusBadgeClass(ticket.status)}`}>
 														{formatEnum(ticket.status)}
 													</span>
-													<span className="rounded-full bg-muted px-2 py-1 font-medium text-foreground">
-														{ticket.assigneeId ? 'Assigned' : 'Not assigned'}
+													<span className={`rounded-full px-2 py-1 font-medium ${ticket.assigned ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
+														{ticket.assigned ? 'Assigned' : 'Not assigned'}
 													</span>
 												</div>
 

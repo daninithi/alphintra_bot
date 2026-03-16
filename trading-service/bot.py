@@ -273,9 +273,9 @@ class TradingBot:
         db = get_db()
         
         try:
-            # Get all open positions from database
+            # Get all open positions for this user (across all bot runs)
             db_positions = db.query(Position).filter(
-                Position.bot_execution_id == self.bot_execution_id
+                Position.user_id == self.user_id
             ).all()
             
             if not db_positions:

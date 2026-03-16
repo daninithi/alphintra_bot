@@ -7,15 +7,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import com.alphintra.auth.dto.AuthResponse;
 import com.alphintra.auth.dto.AdminManagedUserResponse;
+import com.alphintra.auth.dto.AuthResponse;
 import com.alphintra.auth.dto.ChangePasswordRequest;
 import com.alphintra.auth.dto.CreateUser;
 import com.alphintra.auth.dto.DeleteAccountRequest;
 import com.alphintra.auth.dto.LoginHistoryResponse;
 import com.alphintra.auth.dto.LoginRequest;
 import com.alphintra.auth.model.Admin;
-import com.alphintra.auth.model.LoginHistory;
 import com.alphintra.auth.model.User;
 import com.alphintra.auth.model.enums.AccountStatus;
 import com.alphintra.auth.repository.AdminRepository;
@@ -225,7 +224,9 @@ public class AdminService {
                 user.getUsername(),
                 user.getEmail(),
                 status,
-                user.getCreatedAt());
+                user.getCreatedAt(),
+                user.getSubscriptionStatus() != null ? user.getSubscriptionStatus() : "free",
+                user.getSubscriptionEndDate());
     }
 
     public List<LoginHistoryResponse> getUserLoginHistory(Long userId) {

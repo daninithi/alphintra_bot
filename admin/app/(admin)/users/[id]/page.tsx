@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth/auth-provider";
 import { AdminManagedUser, LoginHistoryRecord, UserStrategyInfo, authServiceApiClient } from "@/lib/api/auth-service-api";
+import { Strategy, tradingStrategyAPI } from "@/lib/api/trading-strategy-api";
 
 const displayStatus = (status: string) => status.charAt(0) + status.slice(1).toLowerCase();
 
@@ -18,6 +19,8 @@ export default function UserDetailsPage() {
   const [loadingStrategies, setLoadingStrategies] = useState(false);
   const [loginHistory, setLoginHistory] = useState<LoginHistoryRecord[]>([]);
   const [loadingLoginHistory, setLoadingLoginHistory] = useState(false);
+  const [marketplaceStrategies, setMarketplaceStrategies] = useState<Strategy[]>([]);
+  const [loadingMarketplace, setLoadingMarketplace] = useState(false);
 
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -68,6 +71,19 @@ export default function UserDetailsPage() {
     }
   };
 
+  const loadMarketplaceStrategies = async () => {
+    if (!userId || Number.isNaN(userId)) return;
+    setLoadingMarketplace(true);
+    try {
+      const data = await tradingStrategyAPI.getUserMarketplaceStrategies(userId);
+      setMarketplaceStrategies(data);
+    } catch {
+      // fail silently
+    } finally {
+      setLoadingMarketplace(false);
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -83,6 +99,7 @@ export default function UserDetailsPage() {
       loadUser();
       loadStrategies();
       loadLoginHistory();
+      loadMarketplaceStrategies();
     }
   }, [mounted, isAuthenticated, userId]);
 
@@ -198,6 +215,20 @@ export default function UserDetailsPage() {
             <p className="text-muted-foreground">Created Date</p>
             <p className="font-medium">{user ? new Date(user.createdDate).toLocaleString() : "-"}</p>
           </div>
+          <div>
+            <p className="text-muted-foreground">Subscription</p>
+            <p className="font-medium">
+              {user?.subscriptionStatus === "active" ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                  Subscribed{user.subscriptionEndDate ? ` · until ${new Date(user.subscriptionEndDate).toLocaleDateString()}` : ""}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                  Free
+                </span>
+              )}
+            </p>
+          </div>
         </div>
       </section>
 
@@ -236,58 +267,30 @@ export default function UserDetailsPage() {
       </section>
 
       <section className="rounded-lg border border-border bg-card p-5">
-        <h2 className="text-xl font-semibold mb-4">Strategies</h2>
-        {loadingStrategies ? (
-          <p className="text-sm text-muted-foreground">Loading strategies...</p>
-        ) : strategies.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No strategies found for this user.</p>
+        <h2 className="text-xl font-semibold mb-4">Marketplace Strategies</h2>
+        <p className="text-xs text-muted-foreground mb-3">Strategies this user has published to the marketplace.</p>
+        {loadingMarketplace ? (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        ) : marketplaceStrategies.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No marketplace strategies found for this user.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-muted/40">
                 <tr>
-                  <th className="text-left px-4 py-3 font-semibold">Strategy</th>
-                  <th className="text-left px-4 py-3 font-semibold">Type</th>
-                  <th className="text-left px-4 py-3 font-semibold">Access</th>
-                  <th className="text-left px-4 py-3 font-semibold">Bot Status</th>
-                  <th className="text-left px-4 py-3 font-semibold">Last Run</th>
+                  <th className="text-left px-4 py-3 font-semibold">Name</th>
+                  <th className="text-left px-4 py-3 font-semibold">Description</th>
+                  <th className="text-left px-4 py-3 font-semibold">Price</th>
+                  <th className="text-left px-4 py-3 font-semibold">Purchases</th>
                 </tr>
               </thead>
               <tbody>
-                {strategies.map((s) => (
+                {marketplaceStrategies.map((s) => (
                   <tr key={s.strategy_id} className="border-t border-border">
-                    <td className="px-4 py-3">
-                      <p className="font-medium">{s.name}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{s.strategy_id}</p>
-                    </td>
-                    <td className="px-4 py-3 capitalize">
-                      {s.type === "user_created" ? "User Created" : s.type.charAt(0).toUpperCase() + s.type.slice(1)}
-                    </td>
-                    <td className="px-4 py-3 capitalize">
-                      {s.access_type === "default" ? "Default" : s.access_type === "purchased" ? "Purchased" : s.access_type === "created" ? "Created" : "-"}
-                    </td>
-                    <td className="px-4 py-3">
-                      {s.bot_status === "running" ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900/30 dark:text-green-400">
-                          <span className="h-1.5 w-1.5 rounded-full bg-green-500"></span>Running
-                        </span>
-                      ) : s.bot_status === "stopped" ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                          Stopped
-                        </span>
-                      ) : s.bot_status === "error" ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800 dark:bg-red-900/30 dark:text-red-400">
-                          Error
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                          Never run
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {s.last_run ? new Date(s.last_run).toLocaleString() : "-"}
-                    </td>
+                    <td className="px-4 py-3 font-medium">{s.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground max-w-xs truncate">{s.description || "-"}</td>
+                    <td className="px-4 py-3">${Number(s.price).toFixed(2)}</td>
+                    <td className="px-4 py-3">{s.total_purchases}</td>
                   </tr>
                 ))}
               </tbody>
@@ -299,23 +302,7 @@ export default function UserDetailsPage() {
       <section className="rounded-lg border border-border bg-card p-5">
         <h2 className="text-xl font-semibold mb-4">Actions</h2>
         <div className="flex flex-wrap gap-3">
-          {user?.accountStatus === 'SUSPENDED' ? (
-            <button 
-              disabled={actionLoading || loadingUser} 
-              onClick={handleUnsuspend} 
-              className="rounded-md bg-green-600 px-4 py-2 text-white font-medium hover:bg-green-700 disabled:opacity-50"
-            >
-              Unsuspend account
-            </button>
-          ) : (
-            <button 
-              disabled={actionLoading || loadingUser} 
-              onClick={handleSuspend} 
-              className="rounded-md bg-yellow-500 px-4 py-2 text-black font-medium hover:bg-yellow-600 disabled:opacity-50"
-            >
-              Suspend account
-            </button>
-          )}
+
           <button disabled={actionLoading || loadingUser} onClick={handleDelete} className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50">
             Delete account
           </button>

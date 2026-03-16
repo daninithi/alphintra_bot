@@ -361,7 +361,8 @@ def run_bot_in_thread(strategy_id: str, capital_usdt: float = 100.0, bot_executi
         
         strategy = load_strategy(strategy_id)
         bot_strategy_name = strategy_id
-        bot_instance = TradingBot(strategy, setup_signals=False, bot_execution_id=bot_execution_id, user_id=user_id, trading_pairs=bot_trading_pairs, environment=environment)  # Pass execution context
+
+        bot_instance = TradingBot(strategy, setup_signals=False, bot_execution_id=bot_execution_id, user_id=user_id, trading_pairs=bot_trading_pairs, environment=environment)
         
         if bot_instance.initialize():
             bot_status["running"] = True
@@ -536,6 +537,77 @@ async def get_open_positions(user_id: int = Depends(get_current_user_id)):
             "status": "error",
             "message": f"Failed to retrieve positions: {str(e)}"
         }
+    finally:
+        db.close()
+
+@app.post("/positions/{position_id}/close")
+async def close_position_manually(
+    position_id: int,
+    user_id: int = Depends(get_current_user_id)
+):
+    """Manually close an open position, create trade history."""
+    db = get_db()
+    try:
+        position = db.query(Position).filter(
+            Position.id == position_id,
+            Position.user_id == user_id
+        ).first()
+        if not position:
+            raise HTTPException(status_code=404, detail="Position not found")
+
+        symbol = position.symbol
+        base_currency = symbol.split('/')[0]   # e.g. XRP
+
+        # Fetch live price from mainnet (public endpoint, no auth needed)
+        exit_price = position.current_price or position.entry_price
+        try:
+            import ccxt
+            exchange = ccxt.binance({
+                "options": {"defaultType": "spot"},
+                "enableRateLimit": True,
+            })
+            # Do NOT set sandbox mode — price fetching uses public mainnet endpoints
+            ticker = exchange.fetch_ticker(symbol)
+            exit_price = ticker["last"]
+            logger.info(f"Fetched live price for {symbol}: {exit_price}")
+        except Exception as price_err:
+            logger.warning(f"Could not fetch live price for {symbol}: {price_err}, using stored price")
+
+        pnl = (exit_price - position.entry_price) * position.quantity
+        result = "profit" if pnl >= 0 else "loss"
+        usdt_received = exit_price * position.quantity
+
+        trade = TradeHistory(
+            bot_execution_id=position.bot_execution_id,
+            user_id=user_id,
+            symbol=symbol,
+            buy_price=position.entry_price,
+            sell_price=exit_price,
+            quantity=position.quantity,
+            pnl=pnl,
+            result=result,
+            opened_at=position.opened_at or datetime.now(timezone.utc),
+        )
+        db.add(trade)
+        db.delete(position)
+        db.commit()
+
+        # Update wallet: add USDT received, deduct crypto sold
+        update_wallet_balance(user_id, "USDT", usdt_received)
+        update_wallet_balance(user_id, base_currency, -position.quantity)
+
+        # Remove from in-memory positions if bot is running
+        global bot_instance
+        if bot_instance and hasattr(bot_instance, "signal_processor") and bot_instance.signal_processor:
+            bot_instance.signal_processor.positions.pop(symbol, None)
+
+        return {"status": "success", "pnl": round(pnl, 4), "exit_price": exit_price}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to close position {position_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 
@@ -873,6 +945,48 @@ async def track_strategy_usage(strategy_id: str, user_id: int = Depends(get_curr
     except Exception as e:
         logger.error(f"Failed to track strategy usage: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to track usage: {str(e)}")
+
+
+@app.get("/strategies/users/{target_user_id}")
+async def get_user_strategies_admin(
+    target_user_id: int,
+    _: int = Depends(get_current_user_id)
+):
+    """Admin view: all strategies for a given user with bot status."""
+    db = get_db()
+    try:
+        strategy_db = StrategyDB()
+        strategies = strategy_db.get_user_imported_strategies(target_user_id)
+        strategy_db.close()
+
+        # Get latest bot execution per strategy name for this user
+        bots = db.query(BotExecution).filter(
+            BotExecution.user_id == target_user_id
+        ).order_by(BotExecution.created_at.desc()).all()
+
+        latest_bot: dict = {}
+        for b in bots:
+            if b.strategy_name not in latest_bot:
+                latest_bot[b.strategy_name] = b
+
+        result = []
+        for s in strategies:
+            bot = latest_bot.get(s.name)
+            result.append({
+                "strategy_id": s.strategy_id,
+                "name": s.name,
+                "type": s.type,
+                "access_type": s.access_type,
+                "bot_status": bot.status if bot else None,
+                "last_run": bot.last_run.isoformat() if bot and bot.last_run else None,
+            })
+
+        return {"status": "success", "data": result}
+    except Exception as e:
+        logger.error(f"Admin get user strategies failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
 
 
 # ============================================
@@ -1443,6 +1557,43 @@ async def reject_strategy(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Rejection failed: {str(e)}")
+
+
+@app.get("/api/admin/marketplace-strategies/user-submitted")
+async def get_all_user_marketplace_strategies(
+    _: int = Depends(get_current_user_id)
+):
+    """Admin view: all user-submitted strategies approved in the marketplace."""
+    try:
+        strategy_db = StrategyDB()
+        strategies = strategy_db.get_all_user_marketplace_strategies()
+        strategy_db.close()
+        return {
+            "status": "success",
+            "data": strategies,
+            "count": len(strategies)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/users/{user_id}/marketplace-strategies")
+async def get_user_marketplace_strategies(
+    user_id: int,
+    _: int = Depends(get_current_user_id)
+):
+    """Admin view: get strategies a user has published to the marketplace."""
+    try:
+        strategy_db = StrategyDB()
+        strategies = strategy_db.get_user_marketplace_strategies_admin(user_id)
+        strategy_db.close()
+        return {
+            "status": "success",
+            "data": [s.to_dict() for s in strategies],
+            "count": len(strategies)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

@@ -31,8 +31,11 @@ public class MarketplaceService {
         this.jdbcTemplate = jdbcTemplate;
     }
 
-    public List<Strategy> getMarketplaceStrategies() {
-        return strategyRepository.findAll();
+    public List<Strategy> getMarketplaceStrategies(Long excludeUserId) {
+        if (excludeUserId != null) {
+            return strategyRepository.findByTypeAndAuthorIdNot("marketplace", excludeUserId);
+        }
+        return strategyRepository.findByType("marketplace");
     }
 
     public void buyStrategy(Integer userId, String strategyId) {

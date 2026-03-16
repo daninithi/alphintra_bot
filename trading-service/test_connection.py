@@ -1,55 +1,31 @@
-"""Test Binance Testnet connection."""
-import ccxt
-from dotenv import load_dotenv
+"""Test Binance connection using credentials stored in the wallet DB."""
 import os
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).parent / ".env")
 
-api_key = os.getenv('BINANCE_TESTNET_API_KEY')
-secret = os.getenv('BINANCE_TESTNET_SECRET')
+# Add trading-service to path so exchange_manager imports work
+sys.path.insert(0, str(Path(__file__).parent))
 
-print(f"API Key: {api_key[:20]}...{api_key[-4:]}")
-print(f"Secret: {secret[:20]}...{secret[-4:]}")
+from exchange_manager import ExchangeManager
 
-# Try to connect to testnet
-exchange = ccxt.binance({
-    'apiKey': api_key,
-    'secret': secret,
-    'enableRateLimit': True,
-})
+def test_connection(user_id: int):
+    print(f"\nTesting Binance connection for user_id={user_id}...")
+    manager = ExchangeManager(user_id=user_id)
+    success = manager.initialize()
+    if success:
+        print("✅ Connection successful!")
+        balance = manager.get_testnet_balance()
+        print(f"💰 USDT Balance: ${balance:,.2f}")
+    else:
+        print("❌ Connection failed. Make sure the user has connected their Binance account via the frontend.")
+    manager.close()
 
-# Override URLs for testnet
-exchange.urls['api']['public'] = 'https://testnet.binance.vision/api'
-exchange.urls['api']['private'] = 'https://testnet.binance.vision/api'
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python test_connection.py <user_id>")
+        sys.exit(1)
+    test_connection(int(sys.argv[1]))
 
-print(f"\nPublic URL: {exchange.urls['api']['public']}")
-print(f"Private URL: {exchange.urls['api']['private']}")
-
-try:
-    print("\nTesting connection...")
-    balance = exchange.fetch_balance()
-    print(f"✅ Connected successfully!")
-    print(f"USDT Balance: {balance.get('USDT', {}).get('free', 0)}")
-except Exception as e:
-    print(f"❌ Connection failed: {e}")
-    
-    # Try with different approach
-    print("\n\nTrying alternative configuration...")
-    exchange2 = ccxt.binance({
-        'apiKey': api_key,
-        'secret': secret,
-        'enableRateLimit': True,
-        'options': {
-            'defaultType': 'spot',
-        }
-    })
-    
-    # Set hostname
-    exchange2.hostname = 'testnet.binance.vision'
-    
-    try:
-        balance2 = exchange2.fetch_balance()
-        print(f"✅ Connected with alternative method!")
-        print(f"USDT Balance: {balance2.get('USDT', {}).get('free', 0)}")
-    except Exception as e2:
-        print(f"❌ Alternative method also failed: {e2}")

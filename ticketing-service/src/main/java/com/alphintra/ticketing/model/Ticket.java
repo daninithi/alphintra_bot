@@ -67,6 +67,9 @@ public class Ticket {
 
     private String assigneeEmail;
 
+    @Column(nullable = false, columnDefinition = "BOOLEAN DEFAULT FALSE")
+    private Boolean assigned = false;
+
     @Column(nullable = false, columnDefinition = "INTEGER DEFAULT 0")
     private Integer communicationCount = 0;
 

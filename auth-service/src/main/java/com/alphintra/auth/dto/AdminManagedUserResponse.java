@@ -15,4 +15,6 @@ public class AdminManagedUserResponse {
     private String email;
     private AccountStatus accountStatus;
     private LocalDateTime createdDate;
+    private String subscriptionStatus;
+    private LocalDateTime subscriptionEndDate;
 }

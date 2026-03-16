@@ -35,6 +35,7 @@ class Strategy:
     total_purchases: int = 0
     publish_status: str = 'private'  # 'private', 'pending_review', 'approved', 'rejected'
     reject_reason: Optional[str] = None
+    created_by: str = 'admin'  # 'admin' or 'user'
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -55,6 +56,7 @@ class Strategy:
             'total_purchases': self.total_purchases,
             'publish_status': self.publish_status,
             'reject_reason': self.reject_reason,
+            'created_by': self.created_by,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
@@ -131,7 +133,8 @@ class StrategyDB:
                             s.python_class, s.python_module, s.strategy_file,
                             s.parameters, s.price, s.author_id, s.total_purchases,
                             COALESCE(s.publish_status, 'approved') as publish_status,
-                            s.reject_reason, s.created_at, s.updated_at
+                            s.reject_reason, COALESCE(s.created_by, 'admin') as created_by,
+                            s.created_at, s.updated_at
                         FROM strategies s
                         WHERE s.type = 'default'
                         
@@ -144,7 +147,8 @@ class StrategyDB:
                             s.python_class, s.python_module, s.strategy_file,
                             s.parameters, s.price, s.author_id, s.total_purchases,
                             COALESCE(s.publish_status, 'private') as publish_status,
-                            s.reject_reason, s.created_at, s.updated_at
+                            s.reject_reason, COALESCE(s.created_by, 'user') as created_by,
+                            s.created_at, s.updated_at
                         FROM strategies s
                         WHERE s.type = 'user_created' AND s.author_id = %s
                         
@@ -157,9 +161,10 @@ class StrategyDB:
                             s.python_class, s.python_module, s.strategy_file,
                             s.parameters, s.price, s.author_id, s.total_purchases,
                             COALESCE(s.publish_status, 'approved') as publish_status,
-                            s.reject_reason, s.created_at, s.updated_at
+                            s.reject_reason, COALESCE(s.created_by, 'user') as created_by,
+                            s.created_at, s.updated_at
                         FROM strategies s
-                        WHERE s.type = 'marketplace' AND s.author_id = %s
+                        WHERE s.type = 'marketplace' AND s.author_id = %s AND s.created_by = 'user'
                         
                         UNION
                         
@@ -170,7 +175,8 @@ class StrategyDB:
                             s.python_class, s.python_module, s.strategy_file,
                             s.parameters, s.price, s.author_id, s.total_purchases,
                             COALESCE(s.publish_status, 'approved') as publish_status,
-                            s.reject_reason, s.created_at, s.updated_at
+                            s.reject_reason, COALESCE(s.created_by, 'admin') as created_by,
+                            s.created_at, s.updated_at
                         FROM strategies s
                         INNER JOIN user_strategies us ON s.strategy_id = us.strategy_id
                         WHERE us.user_id = %s AND us.access_type = 'purchased'
@@ -204,7 +210,8 @@ class StrategyDB:
                         python_class, python_module, strategy_file,
                         parameters, price, author_id, total_purchases,
                         COALESCE(publish_status, 'private') as publish_status,
-                        reject_reason, created_at, updated_at
+                        reject_reason, COALESCE(created_by, 'admin') as created_by,
+                        created_at, updated_at
                     FROM strategies
                     WHERE strategy_id = %s
                 """, (strategy_id,))
@@ -224,19 +231,12 @@ class StrategyDB:
             with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
                     SELECT 
-                        strategy_id,
-                        name,
-                        description,
-                        type,
-                        python_class,
-                        python_module,
-                        strategy_file,
-                        parameters,
-                        price,
-                        author_id,
-                        total_purchases,
-                        created_at,
-                        updated_at
+                        strategy_id, name, description, type,
+                        python_class, python_module, strategy_file,
+                        parameters, price, author_id, total_purchases,
+                        COALESCE(publish_status, 'approved') as publish_status,
+                        COALESCE(created_by, 'admin') as created_by,
+                        created_at, updated_at
                     FROM strategies
                     WHERE type = 'default'
                     ORDER BY name
@@ -289,21 +289,14 @@ class StrategyDB:
             with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute("""
                     SELECT 
-                        strategy_id,
-                        name,
-                        description,
-                        type,
-                        python_class,
-                        python_module,
-                        strategy_file,
-                        parameters,
-                        price,
-                        author_id,
-                        total_purchases,
-                        created_at,
-                        updated_at
+                        strategy_id, name, description, type,
+                        python_class, python_module, strategy_file,
+                        parameters, price, author_id, total_purchases,
+                        COALESCE(publish_status, 'approved') as publish_status,
+                        COALESCE(created_by, 'admin') as created_by,
+                        created_at, updated_at
                     FROM strategies
-                    WHERE type = 'marketplace'
+                    WHERE type = 'marketplace' AND created_by = 'admin'
                     ORDER BY total_purchases DESC, name
                 """)
                 
@@ -402,8 +395,10 @@ class StrategyDB:
                 cursor.execute("""
                     INSERT INTO strategies 
                     (strategy_id, name, description, type, price, python_class, 
-                     python_module, strategy_file, parameters, author_id, created_at, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                     python_module, strategy_file, parameters, author_id,
+                     created_by, created_at, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'admin',
+                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
                     strategy_id, name, description, strategy_type, price,
                     python_class, python_module, strategy_file, 
@@ -547,7 +542,8 @@ class StrategyDB:
                             python_module, strategy_file, parameters, price,
                             author_id, total_purchases,
                             COALESCE(publish_status, 'approved') as publish_status,
-                            reject_reason, created_at, updated_at
+                            reject_reason, COALESCE(created_by, 'admin') as created_by,
+                            created_at, updated_at
                         FROM strategies
                         WHERE type = %s
                         ORDER BY created_at DESC
@@ -559,7 +555,8 @@ class StrategyDB:
                             python_module, strategy_file, parameters, price,
                             author_id, total_purchases,
                             COALESCE(publish_status, 'approved') as publish_status,
-                            reject_reason, created_at, updated_at
+                            reject_reason, COALESCE(created_by, 'admin') as created_by,
+                            created_at, updated_at
                         FROM strategies
                         ORDER BY created_at DESC
                     """)
@@ -597,9 +594,9 @@ class StrategyDB:
                     INSERT INTO strategies 
                     (strategy_id, name, description, type, price, python_class, 
                      python_module, strategy_file, parameters, author_id,
-                     publish_status, created_at, updated_at)
+                     publish_status, created_by, created_at, updated_at)
                     VALUES (%s, %s, %s, 'user_created', %s, %s, %s, %s, %s, %s,
-                            'private', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                            'private', 'user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 """, (
                     strategy_id, name, description, price,
                     python_class, python_module, strategy_file,
@@ -616,6 +613,68 @@ class StrategyDB:
             self.connection.rollback()
             return False, str(e)
 
+    def get_all_user_marketplace_strategies(self) -> List[Strategy]:
+        """Admin view: all user-submitted strategies approved in the marketplace."""
+        try:
+            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT 
+                        s.strategy_id, s.name, s.description, s.type,
+                        NULL AS python_class, NULL AS python_module,
+                        NULL AS strategy_file, NULL AS parameters,
+                        s.price, s.author_id, s.total_purchases,
+                        COALESCE(s.publish_status, 'private') as publish_status,
+                        NULL AS reject_reason,
+                        COALESCE(s.created_by, 'user') as created_by,
+                        s.created_at, s.updated_at,
+                        'created' as access_type,
+                        u.email as author_email
+                    FROM strategies s
+                    LEFT JOIN users u ON u.id = s.author_id
+                    WHERE s.created_by = 'user'
+                      AND s.type = 'marketplace' AND s.publish_status = 'approved'
+                    ORDER BY s.total_purchases DESC, s.created_at DESC
+                """)
+                rows = cursor.fetchall()
+                result = []
+                for row in rows:
+                    d = dict(row)
+                    author_email = d.pop('author_email', None)
+                    s = Strategy(**d)
+                    s_dict = s.to_dict()
+                    s_dict['author_email'] = author_email
+                    result.append(s_dict)
+                return result
+        except Exception as e:
+            logger.error(f"Failed to get all user marketplace strategies: {e}")
+            return []
+
+    def get_user_marketplace_strategies_admin(self, user_id: int) -> List[Strategy]:
+        """Admin view: get a user's strategies that are in the marketplace (approved/published)."""
+        try:
+            with self.connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute("""
+                    SELECT 
+                        strategy_id, name, description, type,
+                        NULL AS python_class, NULL AS python_module,
+                        NULL AS strategy_file, NULL AS parameters,
+                        price, author_id, total_purchases,
+                        COALESCE(publish_status, 'private') as publish_status,
+                        NULL AS reject_reason,
+                        COALESCE(created_by, 'user') as created_by,
+                        created_at, updated_at,
+                        'created' as access_type
+                    FROM strategies
+                    WHERE author_id = %s AND created_by = 'user'
+                      AND type = 'marketplace' AND publish_status = 'approved'
+                    ORDER BY created_at DESC
+                """, (user_id,))
+                rows = cursor.fetchall()
+                return [Strategy(**dict(row)) for row in rows]
+        except Exception as e:
+            logger.error(f"Failed to get user marketplace strategies for admin: {e}")
+            return []
+
     def get_user_imported_strategies(self, user_id: int) -> List[Strategy]:
         """Get strategies imported/created by a specific user."""
         try:
@@ -626,10 +685,11 @@ class StrategyDB:
                         python_module, strategy_file, parameters, price,
                         author_id, total_purchases,
                         COALESCE(publish_status, 'private') as publish_status,
-                        reject_reason, created_at, updated_at,
+                        reject_reason, COALESCE(created_by, 'user') as created_by,
+                        created_at, updated_at,
                         'created' as access_type
                     FROM strategies
-                    WHERE author_id = %s AND (type = 'user_created' OR (type = 'marketplace' AND publish_status = 'approved'))
+                    WHERE author_id = %s AND created_by = 'user'
                     ORDER BY created_at DESC
                 """, (user_id,))
                 rows = cursor.fetchall()

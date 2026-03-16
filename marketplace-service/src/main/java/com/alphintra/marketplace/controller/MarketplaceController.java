@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.alphintra.marketplace.dto.ApiMessage;
@@ -28,8 +29,9 @@ public class MarketplaceController {
     }
 
     @GetMapping("/strategies")
-    public ResponseEntity<List<Strategy>> getStrategies() {
-        List<Strategy> data = marketplaceService.getMarketplaceStrategies();
+    public ResponseEntity<List<Strategy>> getStrategies(
+            @RequestParam(required = false) Long excludeUserId) {
+        List<Strategy> data = marketplaceService.getMarketplaceStrategies(excludeUserId);
         System.out.println("Marketplace strategies count: " + data.size());
         return ResponseEntity.ok(data);
     }

@@ -144,7 +144,9 @@ export default function StrategiesPage() {
     );
   }
 
-  const filteredStrategies = strategies;
+  const filteredStrategies = strategies.filter(
+    (s) => s.created_by === 'admin'
+  );
   const stats = {
     total: strategies.length,
     free: strategies.filter((s) => s.price === 0).length,

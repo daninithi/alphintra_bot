@@ -20,8 +20,10 @@ export interface Strategy {
   total_purchases: number;
   publish_status?: 'private' | 'pending_review' | 'approved' | 'rejected';
   reject_reason?: string | null;
+  created_by?: string;
   created_at?: string;
   updated_at?: string;
+  author_email?: string;
 }
 
 export interface UploadStrategyData {
@@ -177,6 +179,27 @@ class TradingStrategyAPI {
       formData,
       { headers: this.getHeaders() }
     );
+  }
+  /**
+   * Get all user-submitted strategies in the marketplace (admin view)
+   */
+  async getAllUserMarketplaceStrategies(): Promise<Strategy[]> {
+    const response = await axios.get(
+      `${TRADING_SERVICE_URL}/api/admin/marketplace-strategies/user-submitted`,
+      { headers: this.getHeaders() }
+    );
+    return response.data.data;
+  }
+
+  /**
+   * Get strategies a user has published to the marketplace (admin view)
+   */
+  async getUserMarketplaceStrategies(userId: number): Promise<Strategy[]> {
+    const response = await axios.get(
+      `${TRADING_SERVICE_URL}/api/admin/users/${userId}/marketplace-strategies`,
+      { headers: this.getHeaders() }
+    );
+    return response.data.data;
   }
 }
 

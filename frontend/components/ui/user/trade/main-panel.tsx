@@ -379,7 +379,7 @@ export default function MainPanel({ onBotStatusChange, onRefresh }: MainPanelPro
             ) : error ? (
               <p className="p-2 sm:p-4 text-xs sm:text-sm text-red-500">{error}</p>
             ) : tradingPositions.filter(p => p.status === 'OPEN').length > 0 ? (
-              <TradingPositionsTable data={tradingPositions.filter(p => p.status === 'OPEN')} />
+              <TradingPositionsTable data={tradingPositions.filter(p => p.status === 'OPEN')} onPositionClosed={fetchAllData} />
             ) : (
               <p className="p-2 sm:p-4 text-xs sm:text-sm text-muted-foreground">No open positions</p>
             )}
@@ -540,7 +540,32 @@ const TradeHistoryTable = ({ data }: { data: TradeOrderData[] }) => (
   </div>
 );
 
-const TradingPositionsTable = ({ data }: { data: TradingPosition[] }) => (
+const TradingPositionsTable = ({ data, onPositionClosed }: { data: TradingPosition[]; onPositionClosed?: () => void }) => {
+  const [closingId, setClosingId] = useState<number | null>(null);
+
+  const handleClose = async (positionId: number) => {
+    if (!confirm('Close this position? A trade history record will be created.')) return;
+    setClosingId(positionId);
+    try {
+      const token = getToken();
+      const res = await fetch(buildGatewayUrl(`/trading/positions/${positionId}/close`), {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.status === 'success') {
+        onPositionClosed?.();
+      } else {
+        alert(json.detail || 'Failed to close position');
+      }
+    } catch (e) {
+      alert('Error closing position');
+    } finally {
+      setClosingId(null);
+    }
+  };
+
+  return (
   <div className="overflow-x-auto">
     <Table className="min-w-[800px]">
       <TableHeader>
@@ -553,6 +578,7 @@ const TradingPositionsTable = ({ data }: { data: TradingPosition[] }) => (
           <TableHead className="text-xs sm:text-sm text-right">Take Profit</TableHead>
           <TableHead className="text-xs sm:text-sm text-right">Unrealized PnL</TableHead>
           <TableHead className="text-xs sm:text-sm">Opened At</TableHead>
+          <TableHead className="text-xs sm:text-sm text-right">Action</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -581,13 +607,25 @@ const TradingPositionsTable = ({ data }: { data: TradingPosition[] }) => (
               <TableCell className="text-xs sm:text-sm">
                 {new Date(position.openedAt).toLocaleString()}
               </TableCell>
+              <TableCell className="text-right">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="text-xs h-6 px-2"
+                  disabled={closingId === position.id}
+                  onClick={() => handleClose(position.id as number)}
+                >
+                  {closingId === position.id ? '...' : 'Close'}
+                </Button>
+              </TableCell>
             </TableRow>
           );
         })}
       </TableBody>
     </Table>
   </div>
-);
+  );
+};
 
 const TradingBotsTable = ({ data, onOpenLogs }: { data: TradingBot[]; onOpenLogs: (botId: number) => void }) => (
   <div className="overflow-x-auto">

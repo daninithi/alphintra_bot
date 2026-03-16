@@ -16,4 +16,6 @@ export interface Strategy {
   };
   verified: boolean;
   type: string;
+  authorId?: number;
+  publishStatus?: string;
 }

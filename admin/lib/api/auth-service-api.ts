@@ -68,6 +68,8 @@ export interface AdminManagedUser {
   email: string;
   accountStatus: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
   createdDate: string;
+  subscriptionStatus: string;
+  subscriptionEndDate?: string | null;
 }
 
 export interface UserStrategyInfo {

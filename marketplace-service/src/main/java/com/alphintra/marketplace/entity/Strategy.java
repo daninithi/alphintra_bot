@@ -44,6 +44,12 @@ public class Strategy {
     @Column(name = "author_id")
     private Integer authorId;
 
+    @Column(name = "publish_status")
+    private String publishStatus;
+
+    @Column(name = "created_by")
+    private String createdBy;
+
     @Column(name = "total_purchases")
     private Integer totalPurchases;
 

@@ -36,7 +36,34 @@ class SignalProcessor:
             from trading_manager import TradingManager
             self.trading_manager = TradingManager(bot_execution_id, user_id, environment)
             self.logger.info(f"✅ Trading manager initialized for bot execution {bot_execution_id}")
+            # Load any existing open positions into memory
+            self._load_existing_positions()
     
+    def _load_existing_positions(self):
+        """Load open positions from DB into memory to avoid duplicate entries."""
+        try:
+            from bot_models import Position, get_db
+            db = get_db()
+            existing = db.query(Position).filter(
+                Position.user_id == self.user_id
+            ).all()
+            db.close()
+            for p in existing:
+                self.positions[p.symbol] = {
+                    'side': 'buy',
+                    'entry_price': p.entry_price,
+                    'entry_time': p.opened_at,
+                    'amount': p.quantity,
+                    'stop_loss': p.stop_loss,
+                    'take_profit': p.take_profit,
+                    'db_id': p.id,
+                    'bot_execution_id': p.bot_execution_id,
+                }
+            if existing:
+                self.logger.info(f"Loaded {len(existing)} existing open position(s) into memory")
+        except Exception as e:
+            self.logger.warning(f"Could not load existing positions: {e}")
+
     def process_symbol(
         self,
         symbol: str,

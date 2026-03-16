@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui";
-import { Loader2 } from "lucide-react";
+import { Loader2, Search, SlidersHorizontal } from "lucide-react";
 import { fetchStrategies, fetchBoughtStrategies } from "@/app/api/strategyApi";
 import StrategyGrid from "@/components/marketplace/StrategyGrid";
 import { Strategy } from "@/components/marketplace/types";
@@ -30,7 +30,7 @@ export default function MarketplacePage() {
       try {
         setLoading(true);
         setError("");
-        const data = await fetchStrategies();
+        const data = await fetchStrategies(user?.id ? Number(user.id) : undefined);
         setStrategies(Array.isArray(data) ? data : []);
       } catch (err: any) {
         console.error("Failed to load marketplace strategies:", err);
@@ -41,7 +41,7 @@ export default function MarketplacePage() {
     }
 
     loadStrategies();
-  }, []);
+  }, [user?.id]);
 
   const filteredStrategies = useMemo(() => {
     let data = strategies.filter(

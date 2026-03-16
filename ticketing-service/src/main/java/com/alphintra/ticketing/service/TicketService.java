@@ -17,6 +17,7 @@ import com.alphintra.ticketing.client.AuthSupportClient;
 import com.alphintra.ticketing.client.dto.AuthSupportAssigneeLookupResponse;
 import com.alphintra.ticketing.client.dto.AuthSupportMember;
 import com.alphintra.ticketing.client.dto.AuthSupportMemberListResponse;
+import com.alphintra.ticketing.client.dto.AuthUserResponse;
 import com.alphintra.ticketing.dto.CreateTicketRequest;
 import com.alphintra.ticketing.dto.TicketResponse;
 import com.alphintra.ticketing.dto.TicketStats;
@@ -114,13 +115,24 @@ public class TicketService {
             ticket.setCategory(request.getCategory());
         }
         if (request.getAssigneeId() != null) {
+            Long previousAssigneeId = ticket.getAssigneeId();
             ticket.setAssigneeId(request.getAssigneeId());
             AuthSupportMember assignee = resolveSupportMember(request.getAssigneeId()).orElse(null);
             ticket.setAssigneeName(request.getAssigneeName() != null ? request.getAssigneeName() : assignee != null ? assignee.getUsername() : ticket.getAssigneeName());
             ticket.setAssigneeEmail(request.getAssigneeEmail() != null ? request.getAssigneeEmail() : assignee != null ? assignee.getEmail() : ticket.getAssigneeEmail());
             if (ticket.getStatus() == TicketStatus.NEW) {
-                ticket.setStatus(TicketStatus.ASSIGNED);
+                ticket.setStatus(TicketStatus.IN_PROGRESS);
             }
+            ticket.setAssigned(true);
+            // Update workload counters
+            try {
+                if (previousAssigneeId != null && !previousAssigneeId.equals(request.getAssigneeId())) {
+                    authSupportClient.decrementLoad(previousAssigneeId);
+                }
+                if (previousAssigneeId == null || !previousAssigneeId.equals(request.getAssigneeId())) {
+                    authSupportClient.incrementLoad(request.getAssigneeId());
+                }
+            } catch (Exception ignored) {}
         }
         if (request.getErrorLogs() != null) {
             ticket.setErrorLogs(request.getErrorLogs());
@@ -153,7 +165,17 @@ public class TicketService {
         ticket.setAssigneeId(assigneeId);
         ticket.setAssigneeName(assignee.getUsername());
         ticket.setAssigneeEmail(assignee.getEmail());
-        ticket.setStatus(TicketStatus.ASSIGNED);
+        ticket.setAssigned(true);
+        if (ticket.getStatus() == TicketStatus.NEW) {
+            ticket.setStatus(TicketStatus.IN_PROGRESS);
+        }
+        // Update workload: decrement old, increment new
+        try {
+            if (ticket.getAssigneeId() != null && !ticket.getAssigneeId().equals(assigneeId)) {
+                authSupportClient.decrementLoad(ticket.getAssigneeId());
+            }
+            authSupportClient.incrementLoad(assigneeId);
+        } catch (Exception ignored) {}
 
         Ticket updatedTicket = ticketRepository.save(ticket);
         return mapToResponse(updatedTicket, true, null);
@@ -163,6 +185,9 @@ public class TicketService {
     public TicketResponse resolveTicket(Long id) {
         Ticket ticket = getTicketEntity(id);
         ticket.setStatus(TicketStatus.RESOLVED);
+        if (ticket.getAssigneeId() != null) {
+            try { authSupportClient.decrementLoad(ticket.getAssigneeId()); } catch (Exception ignored) {}
+        }
         Ticket updatedTicket = ticketRepository.save(ticket);
         return mapToResponse(updatedTicket, true, null);
     }
@@ -182,12 +207,8 @@ public class TicketService {
         stats.setTotalTickets(userTickets.size());
         stats.setOpenTickets((int) userTickets.stream()
                 .filter(ticket -> ticket.getStatus() == TicketStatus.NEW
-                        || ticket.getStatus() == TicketStatus.ASSIGNED
                         || ticket.getStatus() == TicketStatus.IN_PROGRESS
-                        || ticket.getStatus() == TicketStatus.ESCALATED
-                        || ticket.getStatus() == TicketStatus.REOPENED
-                        || ticket.getStatus() == TicketStatus.OPEN
-                        || ticket.getStatus() == TicketStatus.PENDING)
+                        || ticket.getStatus() == TicketStatus.REOPENED)
                 .count());
         stats.setResolvedTickets((int) userTickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.RESOLVED).count());
         stats.setClosedTickets((int) userTickets.stream().filter(ticket -> ticket.getStatus() == TicketStatus.CLOSED).count());
@@ -242,18 +263,16 @@ public class TicketService {
                 ticket.setAssigneeId(assignee.getId());
                 ticket.setAssigneeName(assignee.getUsername());
                 ticket.setAssigneeEmail(assignee.getEmail());
-                ticket.setStatus(TicketStatus.ASSIGNED);
-                return;
+                ticket.setAssigned(true);
+                if (ticket.getStatus() == TicketStatus.NEW) {
+                    ticket.setStatus(TicketStatus.IN_PROGRESS);
+                }
+                try { authSupportClient.incrementLoad(assignee.getId()); } catch (Exception ignored) {}
             }
+            // If no assignee (none in category, or all at capacity): leave as NEW / unassigned
         } catch (Exception ignored) {
-            // Fall back to admin email when assignee lookup is unavailable.
+            // Auth service unavailable — leave ticket unassigned
         }
-
-        AdminContact adminContact = resolveAdminContact();
-        ticket.setAssigneeId(adminContact.id());
-        ticket.setAssigneeName(adminContact.name());
-        ticket.setAssigneeEmail(adminContact.email());
-        ticket.setStatus(TicketStatus.NEW);
     }
 
     private NotificationRouting buildRoutingForTicketCreation(Ticket ticket) {
@@ -295,10 +314,33 @@ public class TicketService {
         response.setCustomerId(ticket.getCustomerId());
         response.setCustomerEmail(ticket.getCustomerEmail());
         response.setCustomerName(ticket.getCustomerName());
+
+        // Backfill customer email/name from auth service if missing
+        if ((ticket.getCustomerEmail() == null || ticket.getCustomerEmail().isBlank()) && ticket.getCustomerId() != null) {
+            try {
+                long custId = Long.parseLong(ticket.getCustomerId());
+                AuthUserResponse user = authSupportClient.getUserById(custId);
+                if (user != null) {
+                    response.setCustomerEmail(user.getEmail());
+                    if (ticket.getCustomerName() == null || ticket.getCustomerName().isBlank()) {
+                        response.setCustomerName(user.getUsername() != null ? user.getUsername() : user.getEmail());
+                    }
+                    // Persist so future calls are fast
+                    ticket.setCustomerEmail(user.getEmail());
+                    if (ticket.getCustomerName() == null || ticket.getCustomerName().isBlank()) {
+                        ticket.setCustomerName(user.getUsername() != null ? user.getUsername() : user.getEmail());
+                    }
+                    ticketRepository.save(ticket);
+                }
+            } catch (Exception ignored) {
+                // Auth service unavailable or customer ID not numeric — skip
+            }
+        }
         response.setErrorLogs(ticket.getErrorLogs());
         response.setAssigneeId(ticket.getAssigneeId());
         response.setAssignedAgentName(ticket.getAssigneeName());
         response.setAssignedAgentEmail(ticket.getAssigneeEmail());
+        response.setAssigned(ticket.getAssigned());
         response.setCreatedAt(ticket.getCreatedAt());
         response.setUpdatedAt(ticket.getUpdatedAt());
         response.setTags(readStringList(ticket.getTags()));

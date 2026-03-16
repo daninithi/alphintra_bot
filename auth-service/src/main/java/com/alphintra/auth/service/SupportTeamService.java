@@ -202,9 +202,8 @@ public class SupportTeamService {
             .collect(Collectors.toList());
 
         if (underCapacityMembers.isEmpty()) {
-            // All members are at capacity, return the one with least load
-            return availableMembers.stream()
-                .min(Comparator.comparingInt(SupportTeam::getCurrentTicketCount));
+            // All members are at capacity — leave unassigned rather than overloading
+            return Optional.empty();
         }
 
         // For high priority, prefer senior members

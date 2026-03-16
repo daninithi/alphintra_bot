@@ -47,15 +47,16 @@ class TradingManager:
             
             api_key, secret_key, env = result
             
-            # Initialize CCXT exchange
-            exchange = ccxt.binance({
+            # Initialize CCXT exchange with sandbox mode set at construction time
+            is_sandbox = (env or "testnet").lower() == "testnet"
+            exchange_options = {
                 'apiKey': api_key,
                 'secret': secret_key,
                 'enableRateLimit': True,
-            })
-            
-            # Set sandbox mode based on environment
-            is_sandbox = (env or "testnet").lower() == "testnet"
+            }
+            if is_sandbox:
+                exchange_options['options'] = {'defaultType': 'spot'}
+            exchange = ccxt.binance(exchange_options)
             exchange.set_sandbox_mode(is_sandbox)
             
             # Fetch balance from Binance
@@ -326,18 +327,23 @@ class TradingManager:
     
     def _open_position(self, db, symbol: str, entry_price: float, quantity: float, stop_loss: float = None, take_profit: float = None):
         """Open a new position or add to existing one."""
-        # Check if position already exists
+        # Check if position already exists for this user (any bot run)
         position = db.query(Position).filter(
-            Position.bot_execution_id == self.bot_execution_id,
+            Position.user_id == self.user_id,
             Position.symbol == symbol
         ).first()
         
         if position:
-            # Average entry price for adding to position
+            # Average entry price for adding to position, update to current bot run
             total_value = (position.entry_price * position.quantity) + (entry_price * quantity)
             total_quantity = position.quantity + quantity
             position.entry_price = total_value / total_quantity
             position.quantity = total_quantity
+            position.bot_execution_id = self.bot_execution_id
+            if stop_loss:
+                position.stop_loss = stop_loss
+            if take_profit:
+                position.take_profit = take_profit
             logger.info(f"📈 Added to position: {symbol} - New avg price: ${position.entry_price:.2f}, Qty: {position.quantity}")
         else:
             # Create new position
@@ -359,7 +365,7 @@ class TradingManager:
     def _close_position(self, db, symbol: str, exit_price: float, quantity: float):
         """Close or reduce a position and record trade history."""
         position = db.query(Position).filter(
-            Position.bot_execution_id == self.bot_execution_id,
+            Position.user_id == self.user_id,
             Position.symbol == symbol
         ).first()
         
@@ -401,7 +407,7 @@ class TradingManager:
         db = get_db()
         try:
             positions = db.query(Position).filter(
-                Position.bot_execution_id == self.bot_execution_id,
+                Position.user_id == self.user_id,
                 Position.symbol == symbol
             ).all()
             

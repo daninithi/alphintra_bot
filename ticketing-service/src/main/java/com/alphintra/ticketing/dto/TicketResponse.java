@@ -27,6 +27,7 @@ public class TicketResponse {
     private Long assigneeId;
     private String assignedAgentName;
     private String assignedAgentEmail;
+    private Boolean assigned;
     private Integer communicationCount;
     private Integer customerUnreadCount;
     private Integer agentUnreadCount;

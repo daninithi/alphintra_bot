@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.alphintra.ticketing.model.TicketCategory;
 import com.alphintra.ticketing.model.TicketPriority;
+import com.fasterxml.jackson.annotation.JsonAlias;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -12,10 +13,13 @@ import lombok.Data;
 @Data
 public class CreateTicketRequest {
 
+    @JsonAlias("customerId")
     private String userId;
 
+    @JsonAlias("customerEmail")
     private String userEmail;
 
+    @JsonAlias({"customerName", "customerUserName"})
     private String userName;
 
     @NotBlank(message = "Title is required")

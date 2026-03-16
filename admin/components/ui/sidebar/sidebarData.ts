@@ -21,11 +21,11 @@ export const mainSidebarItems: SidebarItemType[] = [
     icon: "solar:target-line-duotone",
     url: "/strategies",
   },
-    {
+  {
     id: "market",
     name: "Market",
     icon: "solar:chart-line-duotone",
-    url: "/trades",
+    url: "/market",
   },
   {
     id: "support",

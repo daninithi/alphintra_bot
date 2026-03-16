@@ -13,12 +13,12 @@ export const mainSidebarItems: SidebarItemType[] = [
 ];
 
 export const footerSidebarItems: SidebarItemType[] = [
-  {
-    id: "settings",
-    name: "Settings",
-    icon: "solar:settings-line-duotone",
-    url: "/profile",
-  },
+  // {
+  //   id: "settings",
+  //   name: "Settings",
+  //   icon: "solar:settings-line-duotone",
+  //   url: "/profile",
+  // },
   {
     id: "logout",
     name: "Logout",

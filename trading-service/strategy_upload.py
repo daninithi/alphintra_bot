@@ -211,8 +211,9 @@ class StrategyUploadHandler:
             True if deleted successfully
         """
         try:
-            full_path = STRATEGIES_DIR / file_path
-            
+            normalized = file_path.removeprefix("strategies/")
+            full_path = STRATEGIES_DIR / normalized
+
             if full_path.exists():
                 full_path.unlink()
                 logger.info(f"Deleted strategy file: {file_path}")
@@ -253,7 +254,9 @@ class StrategyUploadHandler:
             File content as string or None if error
         """
         try:
-            full_path = STRATEGIES_DIR / file_path
+            # Strip leading 'strategies/' prefix if present (path may be stored with it)
+            normalized = file_path.removeprefix("strategies/")
+            full_path = STRATEGIES_DIR / normalized
             
             if not full_path.exists():
                 logger.error(f"Strategy file not found: {file_path}")

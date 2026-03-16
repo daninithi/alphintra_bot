@@ -7,7 +7,6 @@ import ccxt
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-from config import Config
 from logger import setup_logger
 import os
 import psycopg2
@@ -149,8 +148,8 @@ class ExchangeManager:
         """Fetch and decrypt API credentials from wallet database."""
         try:
             if not self.user_id:
-                self.logger.warning("No user_id provided, using config credentials")
-                return Config.BINANCE_TESTNET_API_KEY, Config.BINANCE_TESTNET_SECRET
+                self.logger.error("No user_id provided — cannot fetch credentials. User must connect their Binance account via the frontend.")
+                return None, None
             
             self.logger.info(f"Fetching credentials from wallet database for user {self.user_id}...")
             

@@ -40,13 +40,18 @@ function mapStrategy(strategy: any): Strategy {
     gradientColors: ['#374151', '#1f2937'],
 
     type: strategy.type ?? 'default',
+    authorId: strategy.authorId ?? undefined,
+    publishStatus: strategy.publishStatus ?? undefined,
   };
 }
 
-export async function fetchStrategies(): Promise<Strategy[]> {
+export async function fetchStrategies(excludeUserId?: number): Promise<Strategy[]> {
   try {
     const token = getToken();
-    const response = await fetch(STRATEGIES_API_URL, {
+    const url = excludeUserId
+      ? `${STRATEGIES_API_URL}?excludeUserId=${excludeUserId}`
+      : STRATEGIES_API_URL;
+    const response = await fetch(url, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
