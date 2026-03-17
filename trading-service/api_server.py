@@ -362,7 +362,7 @@ def run_bot_in_thread(strategy_id: str, capital_usdt: float = 100.0, bot_executi
         strategy = load_strategy(strategy_id)
         bot_strategy_name = strategy_id
 
-        bot_instance = TradingBot(strategy, setup_signals=False, bot_execution_id=bot_execution_id, user_id=user_id, trading_pairs=bot_trading_pairs, environment=environment)
+        bot_instance = TradingBot(strategy, setup_signals=False, bot_execution_id=bot_execution_id, user_id=user_id, trading_pairs=bot_trading_pairs, environment=environment, capital_usdt=capital_usdt)
         
         if bot_instance.initialize():
             bot_status["running"] = True

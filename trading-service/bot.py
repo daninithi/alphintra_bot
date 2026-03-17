@@ -22,7 +22,7 @@ class TradingBot:
     Runs continuously and executes trading logic at intervals.
     """
     
-    def __init__(self, strategy: BaseStrategy, setup_signals: bool = True, bot_execution_id: int = None, user_id: int = None, trading_pairs: list = None, environment: str = "testnet"):
+    def __init__(self, strategy: BaseStrategy, setup_signals: bool = True, bot_execution_id: int = None, user_id: int = None, trading_pairs: list = None, environment: str = "testnet", capital_usdt: float = None):
         """
         Initialize the trading bot.
         
@@ -40,6 +40,7 @@ class TradingBot:
         self.user_id = user_id
         self.trading_pairs = trading_pairs if trading_pairs else Config.TRADING_PAIRS
         self.environment = environment  # Store environment
+        self.capital_usdt = capital_usdt  # User-specified capital allocation
         
         # Components
         self.exchange_manager: Optional[ExchangeManager] = None
@@ -95,7 +96,8 @@ class TradingBot:
                 self.strategy,
                 bot_execution_id=self.bot_execution_id,
                 user_id=self.user_id,
-                environment=self.environment
+                environment=self.environment,
+                capital_usdt=self.capital_usdt
             )
             
             self.logger.info(f"Strategy loaded: {self.strategy.get_name()}")

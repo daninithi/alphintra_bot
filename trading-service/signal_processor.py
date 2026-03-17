@@ -16,13 +16,14 @@ class SignalProcessor:
     Processes trading signals from strategies and executes orders.
     """
     
-    def __init__(self, exchange_manager: ExchangeManager, strategy: BaseStrategy, bot_execution_id: int = None, user_id: int = None, environment: str = "testnet"):
+    def __init__(self, exchange_manager: ExchangeManager, strategy: BaseStrategy, bot_execution_id: int = None, user_id: int = None, environment: str = "testnet", capital_usdt: float = None):
         self.exchange = exchange_manager
         self.strategy = strategy
         self.logger = setup_logger("SignalProcessor", environment=environment)
         self.bot_execution_id = bot_execution_id
         self.user_id = user_id
         self.environment = environment
+        self.capital_usdt = capital_usdt  # User-specified capital allocation
         
         # Minimum confidence threshold for executing trades (lowered to 50% for demo/testing)
         self.min_confidence = 50
@@ -219,8 +220,12 @@ class SignalProcessor:
             Order size
         """
         try:
-            # Get USDT balance
-            balance = self.exchange.get_testnet_balance('USDT')
+            # Use user-specified capital if provided, otherwise fall back to full balance
+            if self.capital_usdt and self.capital_usdt > 0:
+                balance = self.capital_usdt
+                self.logger.info(f"💼 Using allocated capital: ${balance:.2f} USDT")
+            else:
+                balance = self.exchange.get_testnet_balance('USDT')
             
             # Risk management: use 5-10% of balance per trade based on confidence
             risk_percentage = 0.05 + (signal.confidence / 100 * 0.05)  # 5-10%
