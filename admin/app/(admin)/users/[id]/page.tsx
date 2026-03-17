@@ -302,7 +302,24 @@ export default function UserDetailsPage() {
       <section className="rounded-lg border border-border bg-card p-5">
         <h2 className="text-xl font-semibold mb-4">Actions</h2>
         <div className="flex flex-wrap gap-3">
-
+          {user?.accountStatus === "ACTIVE" && (
+            <button 
+              disabled={actionLoading || loadingUser} 
+              onClick={handleSuspend} 
+              className="rounded-md bg-yellow-600 px-4 py-2 text-white hover:bg-yellow-700 disabled:opacity-50"
+            >
+              Suspend account
+            </button>
+          )}
+          {user?.accountStatus === "SUSPENDED" && (
+            <button 
+              disabled={actionLoading || loadingUser} 
+              onClick={handleUnsuspend} 
+              className="rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
+            >
+              Unsuspend account
+            </button>
+          )}
           <button disabled={actionLoading || loadingUser} onClick={handleDelete} className="rounded-md bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50">
             Delete account
           </button>

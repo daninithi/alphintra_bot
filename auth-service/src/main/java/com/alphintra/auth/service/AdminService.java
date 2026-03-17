@@ -132,6 +132,10 @@ public class AdminService {
         return adminRepository.count() > 0;
     }
 
+    public long getTotalUsersCount() {
+        return userRepository.count();
+    }
+
     public Admin getPrimaryAdmin() {
         return adminRepository.findFirstByOrderByIdAsc()
                 .orElseThrow(() -> new RuntimeException("Admin not found"));

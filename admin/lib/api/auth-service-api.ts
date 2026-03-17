@@ -255,6 +255,17 @@ export class AuthServiceApiClient {
     const response = await this.api.get<LoginHistoryRecord[]>(`/auth/admin/users/${userId}/login-history`);
     return response.data;
   }
+
+  async getMetrics(): Promise<{ totalUsers: number; timestamp: number }> {
+    const response = await this.api.get<{ totalUsers: number; timestamp: number }>('/auth/admin/f/metrics');
+    return response.data;
+  }
+
+  async getSystemHealth(): Promise<{ summary: { total: number; up: number; down: number } }> {
+    // This calls the local Next.js API endpoint
+    const response = await axios.get('/api/system-health');
+    return response.data;
+  }
 }
 
 export const authServiceApiClient = new AuthServiceApiClient();

@@ -51,6 +51,14 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("exists", exists));
     }
 
+    @GetMapping("/f/metrics")
+    public ResponseEntity<Map<String, Object>> getMetrics() {
+        long totalUsers = adminService.getTotalUsersCount();
+        return ResponseEntity.ok(Map.of(
+                "totalUsers", totalUsers,
+                "timestamp", System.currentTimeMillis()));
+    }
+
     @PostMapping("/f/register")
     public ResponseEntity<?> register(@Valid @RequestBody CreateUser createUser) {
         try {
