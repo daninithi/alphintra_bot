@@ -39,17 +39,17 @@ cd auth-service
 ./mvnw spring-boot:run
 ```
 
-### 3. Ticketing Service
+### 4. Ticketing Service
 ```bash
 cd ticketing-service
 ./mvnw spring-boot:run
 ```
-### 4. marketplace Service
+### 5. marketplace Service
 ```bash
 cd marketplace-service
 ./mvn spring-boot:run
 ```
-### 5. Wallet Service
+### 6. Wallet Service
 ```bash
 cd wallet-service
 source venv/bin/activate
@@ -57,7 +57,7 @@ export DATABASE_URL="postgresql://myapp:alphintra123@localhost:5432/alphintra_wa
 uvicorn main:app --reload --port 8000
 ```
 
-### 6. Trading Service
+### 7. Trading Service
 ```bash
 cd trading-service
 source venv/bin/activate
