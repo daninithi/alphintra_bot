@@ -7,6 +7,9 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { authServiceApiClient } from "@/lib/api/auth-service-api";
 import { tradingStrategyAPI } from "@/lib/api/trading-strategy-api";
 import { Users, Zap, BarChart3, Ticket } from "lucide-react";
+import MarketCryptoTable from "@/components/ui/dashboard/MarketCryptoTable";
+import MarketNewsCard from "@/components/ui/dashboard/MarketNewsCard";
+import AdminPriceChart from "@/components/ui/dashboard/AdminPriceChart";
 
 interface MetricsData {
   totalUsers: number;
@@ -138,6 +141,19 @@ export default function Dashboard() {
             </div>
           );
         })}
+      </div>
+
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
+        <div className="col-span-5 lg:col-span-3">
+          <MarketCryptoTable />
+        </div>
+        <div className="col-span-5 space-y-8 lg:col-span-2">
+          <div className="rounded-lg border border-border bg-card p-5">
+            <h2 className="mb-4 text-xl font-bold">BREAKING NEWS</h2>
+            <MarketNewsCard />
+          </div>
+          <AdminPriceChart />
+        </div>
       </div>
     </div>
   );
