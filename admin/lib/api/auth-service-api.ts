@@ -121,9 +121,9 @@ export class AuthServiceApiClient {
       console.log('[AuthAPI] Credentials:', { email: credentials.email, passwordLength: credentials.password?.length });
       const response = await this.api.post('/auth/admin/f/login', credentials);
       const data = response.data;
-      
+
       console.log('[AuthAPI] Login raw response:', data);
-      
+
       // Transform backend response to expected format
       if (data && !data.user && data.userId) {
         data.user = {
@@ -135,12 +135,12 @@ export class AuthServiceApiClient {
           updated_at: new Date().toISOString()
         };
       }
-      
-      console.log('[AuthAPI] Login response transformed:', { 
-        hasToken: !!data?.token, 
-        hasUser: !!data?.user, 
+
+      console.log('[AuthAPI] Login response transformed:', {
+        hasToken: !!data?.token,
+        hasUser: !!data?.user,
         username: data?.username,
-        userUsername: data?.user?.username 
+        userUsername: data?.user?.username
       });
       return data;
     } catch (error: any) {
@@ -166,9 +166,9 @@ export class AuthServiceApiClient {
       console.log('[AuthAPI] Attempting admin registration:', { email: payload.email, username: payload.username });
       const response = await this.api.post('/auth/admin/f/register', payload);
       const data = response.data;
-      
+
       console.log('[AuthAPI] Registration response:', data);
-      
+
       // Transform backend response to expected format
       if (data && !data.user && data.userId) {
         data.user = {
