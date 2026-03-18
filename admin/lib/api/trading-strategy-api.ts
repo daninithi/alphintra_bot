@@ -201,6 +201,18 @@ class TradingStrategyAPI {
     );
     return response.data.data;
   }
+
+  /**
+   * Get total count of strategies
+   */
+  async getStrategiesCount(): Promise<number> {
+    try {
+      const strategies = await this.getStrategies();
+      return strategies.length;
+    } catch {
+      return 0;
+    }
+  }
 }
 
 export const tradingStrategyAPI = new TradingStrategyAPI();

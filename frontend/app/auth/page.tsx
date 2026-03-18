@@ -301,8 +301,8 @@ const AuthPage: React.FC = () => {
           {message && (
             <div
               className={`p-4 mb-6 rounded-xl text-sm font-medium ${message.type === 'success'
-                  ? 'bg-green-500/20 text-green-200 border border-green-400/50'
-                  : 'bg-red-500/20 text-red-200 border border-red-400/50'
+                ? 'bg-green-500/20 text-green-200 border border-green-400/50'
+                : 'bg-red-500/20 text-red-200 border border-red-400/50'
                 }`}
             >
               {message.text}

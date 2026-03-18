@@ -132,6 +132,10 @@ public class AdminService {
         return adminRepository.count() > 0;
     }
 
+    public long getTotalUsersCount() {
+        return userRepository.count();
+    }
+
     public Admin getPrimaryAdmin() {
         return adminRepository.findFirstByOrderByIdAsc()
                 .orElseThrow(() -> new RuntimeException("Admin not found"));
@@ -200,12 +204,12 @@ public class AdminService {
     public void deleteManagedUser(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found"));
-        
+
         // Check if already deleted
         if (Boolean.TRUE.equals(user.getDeleted())) {
             throw new RuntimeException("User is already deleted");
         }
-        
+
         // Soft delete
         user.setDeleted(true);
         user.setDeletedAt(java.time.LocalDateTime.now());
